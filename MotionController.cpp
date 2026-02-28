@@ -201,10 +201,10 @@ void moveServosTo(CartesianPos coords) {
   JointAngles angles = inverseKinematics( coords.x, coords.y, coords.z );
 
   // Safe limit
-  if(  angles.tau     == NAN
-    || angles.gamma   == NAN
-    || angles.lambda  == NAN
-    || angles.epsilon == NAN
+  if(  isnan(angles.tau)
+    || isnan(angles.gamma)
+    || isnan(angles.lambda)
+    || isnan(angles.epsilon)
   ) {
     return;
   }

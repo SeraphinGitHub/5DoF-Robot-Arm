@@ -22,25 +22,32 @@ JointAngles inverseKinematics(float x ,float y ,float z) {
   const float d = sqrt(x*x + y*y) -g;
   const float e = z +f -c;
   const float w = sqrt( d*d + e*e );
+
+  // Unreachable / Singularity
+  if(w == 0 || w > 1.95 *l) return angles;
+
   const float a = w /2;
   
-  float beta    = degrees( acos(d /w) );
-  float phi     = degrees( acos(e /w) );
-  float alpha   = degrees( acos(a /l) );
-  float sigma   = degrees( asin(a /l) );
+  // Ratio calculations
+  float ratioAlpha = a / l;
+  float ratioBeta  = d /w;
+  float ratioPhi   = e /w;
+
+  // Clamp instead of reject
+  ratioAlpha = constrain(ratioAlpha, -1.0, 1.0);
+  ratioBeta  = constrain(ratioBeta , -1.0, 1.0);
+  ratioPhi   = constrain(ratioPhi  , -1.0, 1.0);
+
+  // Safe trigger
+  float beta  = degrees( acos(ratioBeta ) );
+  float phi   = degrees( acos(ratioPhi  ) );
+  float alpha = degrees( acos(ratioAlpha) );
+  float sigma = degrees( asin(ratioAlpha) );
   
   angles.gamma   = sigma *2;
   angles.lambda  = 270 -alpha -phi;
   angles.epsilon = degrees( atan2(y, x) );
   angles.tau     = alpha + beta;
-
-  // Safe limit
-  if(  w > 1.95*l || e < 0.5 ) {
-    angles.tau     = NAN;
-    angles.gamma   = NAN;
-    angles.lambda  = NAN;
-    angles.epsilon = NAN;
-  }
 
   return angles;
 }

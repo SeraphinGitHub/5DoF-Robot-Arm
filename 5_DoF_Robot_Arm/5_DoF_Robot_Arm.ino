@@ -7,22 +7,33 @@
 #include "headers/MotionController.h"
 
 
+bool hasInit = false;
 char cmd_Buff[64];
 
-int userMode = 0;
 
 void setup() {
 
   Serial.begin(115200);
-  while(!Serial);
-  Serial.println(F("RES:CONNECTED"));
 
-  init_Motion();
+  delay(200);
 }
+
 
 void loop() {
 
   if(Serial.available()) {
+
+    String cmd = Serial.readStringUntil('\n');
+
+    if(cmd == "init" && !hasInit) {
+      init_Motion();
+      hasInit = true;
+      return;
+    }
+
+    // **********************
+    TestServo(cmd);
+    // **********************
 
     int cmdLength = Serial.readBytesUntil('\n', cmd_Buff, sizeof(cmd_Buff) -1);
     cmd_Buff[cmdLength] = '\0';
@@ -36,29 +47,14 @@ void loop() {
     // Serial.print(cmd_Buff);
     // Serial.println("]");
     
-    if(strcmp(cmd_Buff, "CMD:PROG") == 0 ) {
-      userMode = 1;
-      Serial.println(F("MODE:PROG"));
-      return;
-    }
+    // CartesianPos coords = parseGcodeLine(cmd_Buff);
+    // setTargetTo(coords);
 
-    switch(userMode) {
-      case 0:   // Coord mode
-        isProgMode = false;
-        CartesianPos coords = parseGcodeLine(cmd_Buff);
-        setTargetTo(coords);
+    // Serial.print(F("RES:GO TO "));
+    // Serial.println(cmd_Buff);
 
-        // Serial.print(F("RES:GO TO "));
-        // Serial.println(cmd_Buff);
-      break;
-
-      case 1:   // Prog mode
-        isProgMode = true;
-        if(strcmp(cmd_Buff, "CMD:PLAY") == 0 ) runProgram();
-        Serial.println(F("RES:PLAY"));
-      break;
-    }
   }
 
-  linear_Interpolation();
+  // linear_Interpolation();
 }
+

@@ -4,10 +4,9 @@
 #include "headers/GcodeParser.h"
 #include "headers/MotionController.h"
 #include "headers/InverseKinematics.h"
-#include "headers/GCodePrograms.h"
 
 
-String       home_Gcode = "G1 X0 Y0 Z150";
+String home_Gcode = "G1 X0 Y0 Z150";
 CartesianPos homeCoords = { 0, 0, 150, 1 };
 CartesianPos currentPos = homeCoords;
 CartesianPos targetPos;
@@ -24,11 +23,21 @@ const Rig rig = {
   10,   // g - Y tool's offset
   50,   // f - Z tool's offset
 
-  8,    // Base offset in degrees
-  30,   // Shoulder offset in degrees
-  25,   // Elbow offset in degrees
-  25,   // Wrist offset in degrees
+  0,  // ofst_base       offset in degrees
+  0,  // ofst_shoulder   offset in degrees
+  0,  // ofst_elbow      offset in degrees
+  0,  // ofst_wrist      offset in degrees
+  0,  // ofst_wrist_roll offset in degrees
+
+  4,  // sho_R_ofst      mirror offset in degrees
+  6,  // elb_R_ofst      mirror offset in degrees
+  0,  // wri_R_ofst      mirror offset in degrees
 };
+
+const Pot basePot     = { A0, 201, 920, 30, 155 };
+const Pot shoulderPot = { A1, 902, 188,  0, 180 };
+const Pot elbowPot    = { A2, 905, 225,  0, 180 };
+const Pot wristPot    = { A3, 925, 189,  0, 180 };
 
 
 // ====================================================
@@ -44,127 +53,112 @@ Servo servo_wrist_R;
 Servo servo_wrist_roll;
 
 const float reachRange   = 1;
-const float moveSpeed    = 80.0;  // mm/s (smaller more precise)
-const float stepInterval = 5.0;   // ms   (ms between steps > smaller more precise)
+const float moveSpeed    = 50.0; // mm/s (smaller more precise)
+const float stepInterval = 5.0;  // ms   (ms between steps > smaller more precise)
 
 
 // ====================================================
 // Vars
 // ====================================================
-bool isHome          = false;
-bool isMoving        = false;
-bool isProgMode      = false;
-
-int  progIndex       = 0;
 unsigned long lastStepTime = 0;
 
-// Previous position in Degrees
-int prevBase         = -1;
-int prevShoulder     = -1;
-int prevElbow        = -1;
-int prevWrist        = -1;
-int prevWristRoll    = -1;
+bool isHome   = false;
+bool isMoving = false;
 
-// Start position in Degrees
-int start_Base       = 98;
-int start_Shoulder   = 180;
-int start_Elbow      = 11;
-int start_Wrist      = 25;
-int start_Wrist_roll = 90;
+// Previous position in Degrees
+int prev_base        = -1;
+int prev_shoulder    = -1;
+int prev_elbow       = -1;
+int prev_wrist       = -1;
+int prev_wrist_roll  = -1;
+
+int start_wrist_roll = 90;
+
+
+
+// ***********************************
+String lastCMD = "";
+
+void TestServo(String cmd) {
+  
+  if(cmd == lastCMD) return;
+  lastCMD = cmd;
+
+  int angle = cmd.toInt();
+  if(isnan(angle)) return;
+
+  Serial.print(F("CMD: "));
+  Serial.println(cmd);
+
+  Serial.print(F("Old potValue: "));
+  Serial.println( analogRead(basePot.pin) );        // <<<<<<<<<<
+
+  delay(100);
+
+  servo_base .write(angle);                       // <<<<<<<<<<
+  delay(1500);
+
+  Serial.print(F("New potValue: "));
+  Serial.println( analogRead(basePot.pin) );        // <<<<<<<<<<
+  Serial.println(F("*****************"));
+}
+
+// ***********************************
+
 
 
 // ====================================================
 // Setup
 // ====================================================
 void init_Motion() {
+ 
+  delay(200);
+
+  int base_angle     = readAngle(basePot);
+  int shoulder_angle = readAngle(shoulderPot);
+  int elbow_angle    = readAngle(elbowPot);
+  int wrist_angle    = readAngle(wristPot);
 
   servo_base       .attach(3);
-  servo_shoulder_R .attach(4);
-  servo_elbow_L    .attach(5);
-  servo_elbow_R    .attach(6);
-  servo_wrist_R    .attach(7);
+  servo_shoulder_L .attach(4);
+  servo_shoulder_R .attach(5);
+  servo_elbow_L    .attach(6);
+  servo_elbow_R    .attach(7);
+  servo_wrist_L    .attach(8);
+  servo_wrist_R    .attach(9);
+  servo_wrist_roll .attach(10);
 
-  delay(100);
+  servo_base       .write(     base_angle);
+  servo_shoulder_L .write(     shoulder_angle);
+  servo_shoulder_R .write(180 -shoulder_angle +rig.sho_R_ofst);
+  servo_elbow_L    .write(     elbow_angle);
+  servo_elbow_R    .write(180 -elbow_angle    +rig.elb_R_ofst);
+  servo_wrist_L    .write(     wrist_angle);
+  servo_wrist_R    .write(180 -wrist_angle    +rig.wri_R_ofst);
+  servo_wrist_roll .write(     start_wrist_roll);
 
-  servo_base       .write(start_Base);
-  servo_shoulder_R .write(180 -start_Shoulder);
-  servo_elbow_L    .write(start_Elbow);
-  servo_elbow_R    .write(180 -start_Elbow);
-  servo_wrist_R    .write(start_Wrist);
-  
-
-  // servo_base       .attach(3);
-
-  // servo_shoulder_L .attach(4);
-  // servo_shoulder_R .attach(5);
-
-  // servo_elbow_L    .attach(6);
-  // servo_elbow_R    .attach(7);
-
-  // servo_wrist_L    .attach(8);
-  // servo_wrist_R    .attach(9);
-  
-  // servo_wrist_roll .attach(10);
-
-  // delay(100);
-
-  // servo_base       .write(start_Base);
-
-  // servo_shoulder_L .write(start_Shoulder);
-  // servo_shoulder_R .write(180 -start_Shoulder);
-
-  // servo_elbow_L    .write(start_Elbow);
-  // servo_elbow_R    .write(180 -start_Elbow);
-
-  // servo_wrist_L    .write(start_Wrist);
-  // servo_wrist_R    .write(180 -start_Wrist);
-
-  // servo_wrist_roll .write(start_Wrist_roll);
-
-  delay(100);
+  Serial.println(F("RES:CONNECTED"));
 }
 
 
 // ====================================================
-// Program modes
+// Methods
 // ====================================================
-void home() {
+int readAngle(const Pot& pot) {
 
-  if(isHome) return;
-
-  isHome = true;
-
-  currentPos.x        = homeCoords.x;
-  currentPos.y        = homeCoords.y;
-  currentPos.z        = homeCoords.z;
-  currentPos.moveType = homeCoords.moveType;
-
-  // setTargetTo(homeCoords);
-}
-
-void runProgram() {
-  
-  if(progIndex < program_002_Length) {
-    setTargetTo( parseGcodeLine( program_002[progIndex] ) );
-    progIndex++;
-  }
-  
-  else {
-    progIndex = 0;
-    Serial.println(F("Program complete !"));
-  }
+  return map( analogRead(pot.pin), pot.min, pot.max, pot.minRange, pot.maxRange );
 }
 
 void setTargetTo(CartesianPos coords) {
 
   targetPos    = coords;
   isMoving     = true;
-  lastStepTime = millis(); // reset step timer
+  lastStepTime = millis();  // reset step timer
 }
 
 bool isNewValue(int &prevAngle, int newAngle) {
 
-  if(prevAngle == newAngle) return false;
+  if (prevAngle == newAngle) return false;
 
   prevAngle = newAngle;
   return true;
@@ -172,93 +166,65 @@ bool isNewValue(int &prevAngle, int newAngle) {
 
 void moveServosTo(CartesianPos coords) {
 
-  JointAngles angles = inverseKinematics( coords.x, coords.y, coords.z );
+  JointAngles angles = inverseKinematics(coords.x, coords.y, coords.z);
 
   // Safe limit
-  if(  isnan(angles.tau)
-    || isnan(angles.gamma)
-    || isnan(angles.lambda)
-    || isnan(angles.epsilon)
-  ) {
+  if (isnan(angles.tau)
+      || isnan(angles.gamma)
+      || isnan(angles.lambda)
+      || isnan(angles.epsilon)) {
     return;
   }
 
-  int ang_Base     = (int)rig.offset_0 +(int)angles.epsilon;
-  int min_Base     = rig.offset_0;
-  int max_Base     = 180;
+  int ang_base     = rig.ofst_base + (int)angles.epsilon;
+  int min_base     = rig.ofst_base;
+  int max_base     = 180;
 
-  int ang_Shoulder = (int)rig.offset_1 +(int)angles.tau;
-  int min_Shoulder = (int)rig.offset_1;
-  int max_Shoulder = 180;
+  int ang_shoulder = rig.ofst_shoulder + (int)angles.tau;
+  int min_shoulder = rig.ofst_shoulder;
+  int max_shoulder = 180;
 
-  int ang_Elbow    = (int)angles.gamma -(int)rig.offset_2;
-  int min_Elbow    = 0;
-  int max_Elbow    = 180 -(int)rig.offset_2;
+  int ang_elbow    = (int)angles.gamma - rig.ofst_elbow;
+  int min_elbow    = 0;
+  int max_elbow    = 180 - rig.ofst_elbow;
 
-  int ang_Wrist    = (int)angles.lambda -(int)rig.offset_3;
-  int min_Wrist    = 0;
-  int max_Wrist    = 180;
+  int ang_wrist    = (int)angles.lambda - rig.ofst_wrist;
+  int min_wrist    = 0;
+  int max_wrist    = 180;
 
 
   // Joint angles bounderies
-  int safeBase     = constrain( ang_Base,      min_Base,      max_Base     );
-  int safeShoulder = constrain( ang_Shoulder,  min_Shoulder,  max_Shoulder );
-  int safeElbow    = constrain( ang_Elbow,     min_Elbow,     max_Elbow    );
-  int safeWrist    = constrain( ang_Wrist,     min_Wrist,     max_Wrist    );
+  int safe_base     = constrain(ang_base,     min_base,     max_base    );
+  int safe_shoulder = constrain(ang_shoulder, min_shoulder, max_shoulder);
+  int safe_elbow    = constrain(ang_elbow,    min_elbow,    max_elbow   );
+  int safe_wrist    = constrain(ang_wrist,    min_wrist,    max_wrist   );
 
 
-  if(isNewValue(prevBase, safeBase)) {
-    servo_base.write(safeBase);
+  if(isNewValue(prev_base, safe_base)) {
+    servo_base.write(safe_base);
   }
 
-  if(isNewValue(prevShoulder, safeShoulder)) {
-    // servo_shoulder_L  .write(     safeShoulder);
-    servo_shoulder_R  .write(180 -safeShoulder);
-  }
-  
-  if(isNewValue(prevElbow, safeElbow)) {
-    servo_elbow_L     .write(     safeElbow);
-    servo_elbow_R     .write(180 -safeElbow);
+  if(isNewValue(prev_shoulder, safe_shoulder)) {
+    servo_shoulder_L.write(safe_shoulder);
+    servo_shoulder_R.write(180 - safe_shoulder + rig.sho_R_ofst);
   }
 
-  if(isNewValue(prevWrist, safeWrist)) {
-    // servo_wrist_L     .write(     safeWrist);
-    servo_wrist_R     .write(180 -safeWrist);
+  if(isNewValue(prev_elbow, safe_elbow)) {
+    servo_elbow_L.write(safe_elbow);
+    servo_elbow_R.write(180 - safe_elbow + rig.elb_R_ofst);
   }
 
-
-  // Serial.print("epsilon (safeBase) : ");
-  // Serial.print(angles.epsilon);
-  // Serial.print("°, ");
-  // // Serial.print(safeBase);
-
-  // Serial.print("°, tau (safeShoulder) : ");
-  // Serial.print(angles.tau);
-  // Serial.print("°, ");
-  // // Serial.print(safeShoulder);
-  
-  // Serial.print("°, gamma (safeElbow) : ");
-  // Serial.print(angles.gamma);
-  // Serial.print("°, ");
-  // // Serial.print(safeElbow);
-  
-  // Serial.print("°, lambda (safeWrist) : ");
-  // Serial.print(angles.lambda);
-  // Serial.print("°, ang_Wrist (safeWrist) : ");
-  // Serial.print(ang_Wrist);
-  // // Serial.print("°, ");
-  // // Serial.print(safeWrist);
-  // Serial.println("°, ");
-
-  // Serial.print("°, moveType : ");
-  // Serial.println(angles.moveType);
+  if(isNewValue(prev_wrist, safe_wrist)) {
+    servo_wrist_L.write(safe_wrist);
+    servo_wrist_R.write(180 - safe_wrist + rig.wri_R_ofst);
+  }
 }
 
 void linear_Interpolation() {
 
   unsigned long now = millis();
 
-  if(!isMoving || now -lastStepTime < stepInterval) return;
+  if(!isMoving || now - lastStepTime < stepInterval) return;
 
   lastStepTime = now;
 
@@ -266,9 +232,9 @@ void linear_Interpolation() {
   float dy = targetPos.y - currentPos.y + offsetPos[1];
   float dz = targetPos.z - currentPos.z + offsetPos[2];
 
-  float dist = sqrt(dx*dx + dy*dy + dz*dz);
-  
-  // Serial.print("Dist : "); Serial.println(dist);
+  float dist = sqrt(dx * dx + dy * dy + dz * dz);
+
+  // Serial.print("Dist : ");   Serial.println(dist);
   // Serial.print("Targ X : "); Serial.println(targetPos.x);
   // Serial.print("Targ Y : "); Serial.println(targetPos.y);
   // Serial.print("Targ Z : "); Serial.println(targetPos.z);
@@ -276,20 +242,18 @@ void linear_Interpolation() {
   if(isnan(dist)) return;
 
   if(dist <= reachRange) {
-    
-    isMoving  = false;
 
-    Serial.println  (F("RES:ARRIVED"));
-    
+    isMoving = false;
+
+    Serial.println(F("RES:ARRIVED"));
+
     // Serial.print  (F("Arrived at :   X "));
     // Serial.print  ( targetPos.x  );
     // Serial.print  (F("   Y "));
     // Serial.print  ( targetPos.y  );
     // Serial.print  (F("   Z "));
     // Serial.println( targetPos.z  );
-    
-    if(isProgMode) runProgram();
-    
+
     return;
   }
 
@@ -300,7 +264,7 @@ void linear_Interpolation() {
   float uz = dz * invDist;
 
   // Move by step size
-  float stepSize = moveSpeed * (stepInterval / 1000.0); // mm per frame
+  float stepSize = moveSpeed * (stepInterval / 1000.0);  // mm per frame
 
   currentPos.x += ux * stepSize;
   currentPos.y += uy * stepSize;
@@ -308,6 +272,3 @@ void linear_Interpolation() {
 
   moveServosTo(currentPos);
 }
-
-
-

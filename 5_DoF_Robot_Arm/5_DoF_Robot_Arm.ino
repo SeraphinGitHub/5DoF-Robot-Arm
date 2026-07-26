@@ -32,7 +32,7 @@ void loop() {
     }
 
     // **********************
-    TestServo(cmd);
+    ManuTestServo(cmd);
     // **********************
 
     int cmdLength = Serial.readBytesUntil('\n', cmd_Buff, sizeof(cmd_Buff) -1);

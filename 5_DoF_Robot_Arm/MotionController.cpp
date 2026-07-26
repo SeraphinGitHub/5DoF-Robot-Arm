@@ -23,18 +23,18 @@ const Rig rig = {
   10,   // g - Y tool's offset
   50,   // f - Z tool's offset
 
-  0,  // ofst_base       offset in degrees
-  0,  // ofst_shoulder   offset in degrees
-  0,  // ofst_elbow      offset in degrees
-  0,  // ofst_wrist      offset in degrees
-  0,  // ofst_wrist_roll offset in degrees
+  4,    // ofst_base   offset in degrees
+  0,    // ofst_sho    offset in degrees
+  0,    // ofst_elb    offset in degrees
+  0,    // ofst_wri    offset in degrees
+  0,    // ofst_wriRol offset in degrees
 
-  4,  // sho_R_ofst      mirror offset in degrees
-  6,  // elb_R_ofst      mirror offset in degrees
-  0,  // wri_R_ofst      mirror offset in degrees
+  9,    // sho_R_ofst      mirror offset in degrees
+  8,    // elb_R_ofst      mirror offset in degrees
+  0,    // wri_R_ofst      mirror offset in degrees
 };
 
-const Pot basePot     = { A0, 201, 920, 30, 155 };
+const Pot basePot     = { A0, 201, 920, 20, 155 };
 const Pot shoulderPot = { A1, 902, 188,  0, 180 };
 const Pot elbowPot    = { A2, 905, 225,  0, 180 };
 const Pot wristPot    = { A3, 925, 189,  0, 180 };
@@ -72,35 +72,52 @@ int prev_elbow       = -1;
 int prev_wrist       = -1;
 int prev_wrist_roll  = -1;
 
-int start_wrist_roll = 90;
+int start_wristRoll  = 90;
 
 
 
 // ***********************************
-String lastCMD = "";
-
-void TestServo(String cmd) {
+void ManuTestServo(String cmd) {
   
-  if(cmd == lastCMD) return;
-  lastCMD = cmd;
+  // CMD examples :
+  // base:90
+  // shoulder:135
+  // elbow:87
 
-  int angle = cmd.toInt();
-  if(isnan(angle)) return;
+  cmd.trim();
+  int colon = cmd.indexOf(':');
 
-  Serial.print(F("CMD: "));
-  Serial.println(cmd);
+  if(colon == -1) return;
 
-  Serial.print(F("Old potValue: "));
-  Serial.println( analogRead(basePot.pin) );        // <<<<<<<<<<
+  String axisName = cmd.substring(0, colon);          // joint name (base, shoulder, elbow, wrist)
+  int    angle    = cmd.substring(colon + 1).toInt(); // angle value
 
-  delay(100);
+  if(axisName == "base") {
+    angle = limitRange(angle, basePot);
+    servo_base       .write(     angle +rig.ofst_base);
+  }
+  
+  else if(axisName == "shoulder") {
+    angle = limitRange(angle, shoulderPot);
+    servo_shoulder_L .write(     angle +rig.ofst_sho);
+    servo_shoulder_R .write(180 -angle +rig.ofst_sho +rig.mir_sho_ofst);
+  }
+  
+  else if(axisName == "elbow") {
+    angle = limitRange(angle, elbowPot);
+    servo_elbow_L    .write(     angle +rig.ofst_elb);
+    servo_elbow_R    .write(180 -angle +rig.ofst_elb +rig.mir_elb_ofst);
+  }
+  
+  else if(axisName == "wrist") {
+    angle = limitRange(angle, wristPot);
+    servo_wrist_L    .write(     angle +rig.ofst_wri);
+    servo_wrist_R    .write(180 -angle +rig.ofst_wri +rig.mir_wri_ofst);
+  }
 
-  servo_base .write(angle);                       // <<<<<<<<<<
-  delay(1500);
-
-  Serial.print(F("New potValue: "));
-  Serial.println( analogRead(basePot.pin) );        // <<<<<<<<<<
-  Serial.println(F("*****************"));
+  else if(axisName == "wristRoll") {
+    servo_wrist_roll .write(     angle +rig.ofst_wriRoll);
+  }
 }
 
 // ***********************************
@@ -128,27 +145,36 @@ void init_Motion() {
   servo_wrist_R    .attach(9);
   servo_wrist_roll .attach(10);
 
-  servo_base       .write(     base_angle);
-  servo_shoulder_L .write(     shoulder_angle);
-  servo_shoulder_R .write(180 -shoulder_angle +rig.sho_R_ofst);
-  servo_elbow_L    .write(     elbow_angle);
-  servo_elbow_R    .write(180 -elbow_angle    +rig.elb_R_ofst);
-  servo_wrist_L    .write(     wrist_angle);
-  servo_wrist_R    .write(180 -wrist_angle    +rig.wri_R_ofst);
-  servo_wrist_roll .write(     start_wrist_roll);
+  servo_base       .write(     base_angle      +rig.ofst_base                     );
+  servo_shoulder_L .write(     shoulder_angle  +rig.ofst_sho                      );
+  servo_shoulder_R .write(180 -shoulder_angle  +rig.ofst_sho     +rig.mir_sho_ofst);
+  servo_elbow_L    .write(     elbow_angle     +rig.ofst_elb                      );
+  servo_elbow_R    .write(180 -elbow_angle     +rig.ofst_elb     +rig.mir_elb_ofst);
+  servo_wrist_L    .write(     wrist_angle     +rig.ofst_wri                      );
+  servo_wrist_R    .write(180 -wrist_angle     +rig.ofst_wri     +rig.mir_wri_ofst);
+  servo_wrist_roll .write(     start_wristRoll +rig.ofst_wriRoll                  );
 
   Serial.println(F("RES:CONNECTED"));
 }
 
 
 // ====================================================
-// Methods
+// Vars Methods
 // ====================================================
 int readAngle(const Pot& pot) {
 
   return map( analogRead(pot.pin), pot.min, pot.max, pot.minRange, pot.maxRange );
 }
 
+int limitRange(int angle, const Pot& pot) {
+
+  return constrain(angle, pot.minRange, pot.maxRange);
+}
+
+
+// ====================================================
+// Methods
+// ====================================================
 void setTargetTo(CartesianPos coords) {
 
   targetPos    = coords;
@@ -180,15 +206,15 @@ void moveServosTo(CartesianPos coords) {
   int min_base     = rig.ofst_base;
   int max_base     = 180;
 
-  int ang_shoulder = rig.ofst_shoulder + (int)angles.tau;
-  int min_shoulder = rig.ofst_shoulder;
+  int ang_shoulder = rig.ofst_sho + (int)angles.tau;
+  int min_shoulder = rig.ofst_sho;
   int max_shoulder = 180;
 
-  int ang_elbow    = (int)angles.gamma - rig.ofst_elbow;
+  int ang_elbow    = (int)angles.gamma - rig.ofst_elb;
   int min_elbow    = 0;
-  int max_elbow    = 180 - rig.ofst_elbow;
+  int max_elbow    = 180 - rig.ofst_elb;
 
-  int ang_wrist    = (int)angles.lambda - rig.ofst_wrist;
+  int ang_wrist    = (int)angles.lambda - rig.ofst_wri;
   int min_wrist    = 0;
   int max_wrist    = 180;
 
@@ -206,17 +232,17 @@ void moveServosTo(CartesianPos coords) {
 
   if(isNewValue(prev_shoulder, safe_shoulder)) {
     servo_shoulder_L.write(safe_shoulder);
-    servo_shoulder_R.write(180 - safe_shoulder + rig.sho_R_ofst);
+    servo_shoulder_R.write(180 - safe_shoulder + rig.mir_sho_ofst);
   }
 
   if(isNewValue(prev_elbow, safe_elbow)) {
     servo_elbow_L.write(safe_elbow);
-    servo_elbow_R.write(180 - safe_elbow + rig.elb_R_ofst);
+    servo_elbow_R.write(180 - safe_elbow + rig.mir_elb_ofst);
   }
 
   if(isNewValue(prev_wrist, safe_wrist)) {
     servo_wrist_L.write(safe_wrist);
-    servo_wrist_R.write(180 - safe_wrist + rig.wri_R_ofst);
+    servo_wrist_R.write(180 - safe_wrist + rig.mir_wri_ofst);
   }
 }
 

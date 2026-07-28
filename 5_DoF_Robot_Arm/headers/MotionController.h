@@ -34,15 +34,16 @@
 
   extern const  Rig rig;
   
+  extern CartesianPos homeCoords;
   extern CartesianPos currentPos;
 
-  int readAngle     (const Pot& pot);
-  int limitRange    (int angle, const Pot& pot);
-
-  void ManuTestServo(String cmd); // *************************************************************
+  bool isNewValue   (int &prevAngle, int newAngle);
+  int  readAngle    (const Pot& pot);
+  int  limitRange   (int angle, const Pot& pot);
+  
+  void ManuTestServo(char* cmd_Buff); // *************************************************************
   void init_Motion  ();
   void setTargetTo  (CartesianPos coords);
-  bool isNewValue   (int &prevAngle, int newAngle);
   void moveServosTo (CartesianPos coords);
   void linear_Interpolation();
 

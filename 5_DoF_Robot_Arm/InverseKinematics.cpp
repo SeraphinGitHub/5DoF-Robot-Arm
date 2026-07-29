@@ -8,67 +8,91 @@ JointAngles inverseKinematics(float x ,float y ,float z) {
 
   JointAngles angles;
 
-  angles.tau     = NAN;
+  angles.epsilon = NAN;
   angles.gamma   = NAN;
   angles.lambda  = NAN;
-  angles.epsilon = NAN;
+  angles.tau     = NAN;
   
   // Robot dimensions in mm
-  const int   c = rig.c; // Base height
-  const int   l = rig.l; // Arms lengths (both the same size)
-  const int   g = rig.g; // Y tool's offset
-  const int   f = rig.f; // Z tool's offset
+  float c = rig.c; // Base height
+  float l = rig.l; // Arms lengths (both the same size)
+  float g = rig.g; // Y tool's offset
+  float f = rig.f; // Z tool's offset
 
-  const float radius = sqrt(x*x + y*y);
-  const float d = radius -g;
-  const float e = z +f -c;
-  const float w = sqrt(d*d + e*e);
+  // Distance base > tool's center
+  float radius  = sqrt(x*x + y*y);
+  
+  // Wrist position
+  float wZ = z +f;
+  float d  = radius -g;
+  float e  = wZ -c;
 
+  // Arm geometry
+  float w  = sqrt(d*d + e*e);
+  float a  = w *0.5;
+
+  // ===============================================
   // Safe limit
-  if(w < 0.4 *l || w > 1.95 *l) return angles;
+  // ===============================================
+  if(w < f +10 || w > 1.95 *l) return angles;
+  // ===============================================
 
-  const float a = w /2;
+  // Clamp ratios to avoid NAN
+  float ratAlpha = constrain( a /l , -1.0, 1.0);
+
+  // Calculate angles in Radians
+  float alpha    = acos  (ratAlpha);
+  float beta     = atan2 (e, d);
+  float phi      = atan2 (d, e);
+  float epsilon  = atan2 (y, x);
+  float gamma    = PI  - (alpha *2);
+  float lambda   = PI  - alpha -phi;
+  float tau      = wZ > c ? alpha +beta : alpha -beta;
+
+  angles.epsilon = degrees( epsilon );
+  angles.gamma   = degrees( gamma   );
+  angles.lambda  = degrees( lambda  );
+  angles.tau     = degrees( tau     );
   
-  // Ratio calculations
-  float ratioAlpha = a /l;
-  float ratioBeta  = d /w;
-  float ratioPhi   = e /w;
+  // X80 Y350 Z150
+  Serial.println("*****************************************");
+  Serial.print  ("Epsilon : "  );
+  Serial.print  (angles.epsilon);
+  Serial.print  (", Gamma : "  );
+  Serial.print  (angles.gamma  );
+  Serial.print  (", Lambda : " );
+  Serial.print  (angles.lambda );
+  Serial.print  (", Tau : "    );
+  Serial.println(angles.tau    );
 
-  // Clamp instead of reject
-  ratioAlpha = constrain(ratioAlpha, -1.0, 1.0);
-  ratioBeta  = constrain(ratioBeta , -1.0, 1.0);
-  ratioPhi   = constrain(ratioPhi  , -1.0, 1.0);
+  Serial.print  ("W : ");
+  Serial.print  (w       );
+  Serial.print  (", d : ");
+  Serial.print  (d       );
+  Serial.print  (", e : ");
+  Serial.println(e       );
 
-  // Safe trigger
-  float beta  = degrees( acos(ratioBeta ) );
-  float phi   = degrees( acos(ratioPhi  ) );
-  float alpha = degrees( acos(ratioAlpha) );
-  float sigma = degrees( asin(ratioAlpha) );
-  
-  bool isTop = z +f > c;
+  Serial.print  ("c : ");
+  Serial.print  (c       );
+  Serial.print  (", l : ");
+  Serial.print  (l       );
+  Serial.print  (", g : ");
+  Serial.print  (g       );
+  Serial.print  (", f : ");
+  Serial.println(f       );
 
-  angles.epsilon = degrees( atan2(y, x) );
-  angles.gamma   = sigma *2;
-  angles.tau     = isTop ? alpha +beta : alpha -beta;
-  angles.lambda  = 270 -angles.tau -angles.gamma;
-  
-  // Serial.println("*******************");
-  // Serial.print(" Tau : ");
-  // Serial.print(angles.tau);
-  // Serial.print(", Epsilon : ");
-  // Serial.print(angles.epsilon);
-  // Serial.print(", Gamma : ");
-  // Serial.print(angles.gamma);
-  // Serial.print(", Lambda : ");
-  // Serial.print(angles.lambda);
-  // Serial.print(", Beta : ");
-  // Serial.print(beta);
-  // Serial.print(", Phi : ");
-  // Serial.print(phi);
-  // Serial.print(", Alpha : ");
-  // Serial.print(alpha);
-  // Serial.print(", Sigma : ");
-  // Serial.println(sigma);
+  Serial.print  ("Alpha : "     );
+  Serial.print  ( degrees( alpha ));
+  Serial.print  (", Beta : "      );
+  Serial.print  ( degrees( beta  ));
+  Serial.print  (", Phi : "       );
+  Serial.println( degrees( phi   ));
+
+  // *****************************************
+  // Epsilon : 77.12, Gamma : 120.12, Lambda : 82.01, Tau : 51.89
+  // W : 346.62, d : 321.49, e : 129.59
+  // c : 100.00, l : 200.00, g : 37.00, f : 80.00
+  // Alpha : 29.94, Beta : 21.95, Phi : 68.05
 
   return angles;
 }

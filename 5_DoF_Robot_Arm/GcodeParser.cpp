@@ -10,48 +10,48 @@ float old_Z = currentPos.z;
 // Read one G-code line at a time from UGS
 CartesianPos parseGcodeLine(String gcodeLine) {
   
-  CartesianPos result;
+  CartesianPos coords;
 
-  result.x = NAN;
-  result.y = NAN;
-  result.z = NAN;
-  result.moveType = NAN;
+  coords.x = NAN;
+  coords.y = NAN;
+  coords.z = NAN;
+  coords.moveType = NAN;
 
   // Trim any extra spaces or newlines
   gcodeLine.trim();
 
-  if(gcodeLine.length() == 0) return result;
+  if(gcodeLine.length() == 0) return coords;
 
   int index_X     = gcodeLine.indexOf("X");
-  result.x        = extractCoord(gcodeLine, index_X, "float");
+  coords.x        = extractCoord(gcodeLine, index_X, "float");
   
   int index_Y     = gcodeLine.indexOf("Y");
-  result.y        = extractCoord(gcodeLine, index_Y, "float");
+  coords.y        = extractCoord(gcodeLine, index_Y, "float");
 
   int index_Z     = gcodeLine.indexOf("Z");
-  result.z        = extractCoord(gcodeLine, index_Z, "float");
+  coords.z        = extractCoord(gcodeLine, index_Z, "float");
 
   int index_G     = gcodeLine.indexOf("G");
-  result.moveType = extractCoord(gcodeLine, index_G, "int");
+  coords.moveType = extractCoord(gcodeLine, index_G, "int");
 
-  if(!isnan(result.x)) old_X = result.x;
-  if(!isnan(result.y)) old_Y = result.y;
-  if(!isnan(result.z)) old_Z = result.z;
+  if(!isnan(coords.x)) old_X = coords.x;
+  if(!isnan(coords.y)) old_Y = coords.y;
+  if(!isnan(coords.z)) old_Z = coords.z;
 
-  if(isnan(result.x) && !isnan(old_X)) result.x = old_X;
-  if(isnan(result.y) && !isnan(old_Y)) result.y = old_Y;
-  if(isnan(result.z) && !isnan(old_Z)) result.z = old_Z;
+  if(isnan(coords.x) && !isnan(old_X)) coords.x = old_X;
+  if(isnan(coords.y) && !isnan(old_Y)) coords.y = old_Y;
+  if(isnan(coords.z) && !isnan(old_Z)) coords.z = old_Z;
 
   // Serial.print   ("MoveType: ");
-  // Serial.print   (result.moveType);
+  // Serial.print   (coords.moveType);
   // Serial.print   (", x: ");
-  // Serial.print   (result.x);
+  // Serial.print   (coords.x);
   // Serial.print   (", y: ");
-  // Serial.print   (result.y);
+  // Serial.print   (coords.y);
   // Serial.print   (", z: ");
-  // Serial.println (result.z);
+  // Serial.println (coords.z);
 
-  return result;
+  return coords;
 }
 
 

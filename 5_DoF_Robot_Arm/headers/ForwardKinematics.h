@@ -5,9 +5,10 @@
   #include "GcodeParser.h"
 
   CartesianPos forwardKinematics(
-    float  epsilon_Deg,
-    float  tau_Deg,
-    float  gamma_Deg
+    float  deg_epsilon,
+    float  deg_tau,
+    float  deg_gamma,
+    float  deg_lambda
   );
 
 #endif

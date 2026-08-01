@@ -14,6 +14,7 @@
     int f;             // Z Wrist offset
 
     int ofst_base;     // Base       offset in degrees
+    int ofst_MG995;    // Sho & Elb  offset in degrees
     int ofst_sho;      // Shoulder   offset in degrees
     int ofst_elb;      // Elbow      offset in degrees
     int ofst_wri;      // Wrist      offset in degrees
@@ -41,8 +42,8 @@
   int  readAngle    (const Pot& pot);
   int  limitRange   (int angle, const Pot& pot);
   
-  void ManuTestServo(char* cmd_Buff); // *************************************************************
-  void init_Motion  ();
+  void initController();
+  void manuAngleMove(char* cmd_Buff);
   void setTargetTo  (CartesianPos coords);
   void moveServosTo (CartesianPos coords);
   void linear_Interpolation();

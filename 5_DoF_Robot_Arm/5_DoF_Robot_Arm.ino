@@ -48,17 +48,17 @@ void loop() {
     }
 
     // **********************
-    manuAngleMove(cmd_Buff);
+    // manuAngleMove(cmd_Buff);
     // **********************
 
-    // CartesianPos coords = parseGcodeLine(cmd_Buff);
-    // setTargetTo(coords);
+    CartesianPos coords = parseGcodeLine(cmd_Buff);
+    setTargetTo(coords);
 
-    // Serial.print(F("RES:GO TO "));
-    // Serial.println(cmd_Buff);
+    Serial.print(F("RES:GO TO "));
+    Serial.println(cmd_Buff);
 
   }
 
-  // linear_Interpolation();
+  linear_Interpolation();
 }
 

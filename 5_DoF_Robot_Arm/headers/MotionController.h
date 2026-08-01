@@ -7,14 +7,12 @@
 
   // Robot dimensions in mm
   struct Rig {
-
     int c;             // Base height
     int l;             // Arm lengths (both the same size)
     int g;             // Y Wrist offset
     int f;             // Z Wrist offset
 
     int ofst_base;     // Base       offset in degrees
-    int ofst_MG995;    // Sho & Elb  offset in degrees
     int ofst_sho;      // Shoulder   offset in degrees
     int ofst_elb;      // Elbow      offset in degrees
     int ofst_wri;      // Wrist      offset in degrees
@@ -41,6 +39,9 @@
   bool isNewValue   (int &prevAngle, int newAngle);
   int  readAngle    (const Pot& pot);
   int  limitRange   (int angle, const Pot& pot);
+
+  int MG995_correction_IK(float IK_angle);
+  int MG995_correction_FK(int potAngle);
   
   void initController();
   void manuAngleMove(char* cmd_Buff);

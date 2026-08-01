@@ -12,7 +12,6 @@ CartesianPos homeCoords = { 0, 100, 200, 1 };
 CartesianPos currentPos;
 CartesianPos targetPos;
 
-
 // ====================================================
 // Robot dimensions (mm)
 // ====================================================
@@ -23,7 +22,6 @@ const Rig rig = {
   80,   // f - Z tool's offset
 
   4,    // ofst_base    offset in degrees
-  10,   // ofst_MG995   offset in degrees
   24,   // ofst_sho     offset in degrees
   -3,   // ofst_elb     offset in degrees
   -7,   // ofst_wri     offset in degrees
@@ -34,42 +32,126 @@ const Rig rig = {
   0,    // mir_wri_ofst mirror offset in degrees
 };
 
-
-// **********************************
 // base potAngle:
 //   0° >  31
-//  45° > 285 ==> mesured
+//  45° > 285 ==> measured
 //  90° > 540
-// 135° > 794 ==> mesured
+// 135° > 794 ==> measured
 // 180° > 1048
-// **********************************
-// shoulder potAngle:
-//   0° > 798
-//  45° > 628 ==> mesured > 63°
-//  90° > 458
-// 135° > 287 ==> mesured > 141°
-// 180° > 117
-// **********************************
-// elbow potAngle:
-//   0° > 211
-//  45° > 372 ==> mesured > 63°
-//  90° > 534
-// 135° > 695 ==> mesured > 141°
-// 180° > 856
-// **********************************
-// wrist potAngle:
-//   0° > 940
-//  45° > 766 ==> mesured > 45°
-//  90° > 592
-// 135° > 418 ==> mesured > 135°
-// 180° > 244
-// **********************************
 
 const Pot basePot     = { A0,  0, 1023, 24, 160 };
 // const Pot basePot     = { A0, 31, 1048, 24, 160 };
 const Pot shoulderPot = { A1, 798, 117, 24, 180 };
-const Pot elbowPot    = { A2, 211, 856, 24, 180 };
+// const Pot elbowPot    = { A2, 211, 856, 24, 180 };
+const Pot elbowPot    = { A2, 211, 856, 0, 180 };
 const Pot wristPot    = { A3, 940, 244,  0, 180 };
+
+
+
+
+
+struct CalibrationTable {
+  float real;
+  float measured;
+};
+
+CalibrationTable MG995_table[] = {
+  {   5,   2 },
+  {  10,   5 },
+  {  15,  10 },
+  {  20,  17 },
+  {  25,  23 },
+  {  30,  28 },
+  {  35,  33 },
+  {  40,  39 },
+  {  45,  44 },
+  {  50,  50 },
+  {  55,  55 },
+  {  60,  60 },
+  {  65,  65 },
+  {  70,  70 },
+  {  75,  75 },
+  {  80,  80 },
+  {  85,  85 },
+  {  90,  90 },
+  {  95,  95 },
+  { 100, 100 },
+  { 105, 105 },
+  { 110, 110 },
+  { 115, 115 },
+  { 120, 120 },
+  { 125, 125 },
+  { 130, 130 },
+  { 135, 135 },
+  { 140, 141 },
+  { 145, 147 },
+  { 150, 152 },
+  { 155, 158 },
+  { 160, 164 },
+  { 165, 171 },
+  { 170, 178 },
+  { 175, 184 },
+  { 180, 190 }
+};
+
+
+int MG995_correction_IK(float IK_angle) {
+  int tableSize = sizeof(MG995_table) / sizeof(MG995_table[0]);
+
+  for(int i = 0; i < tableSize -1; i++) {
+
+    float real_down = MG995_table[i   ].real;
+    float real_up   = MG995_table[i +1].real;
+
+    float meas_down = MG995_table[i   ].measured;
+    float meas_up   = MG995_table[i +1].measured;
+
+    if(IK_angle >= real_down
+    && IK_angle <= real_up) {
+
+      // Interpolate measured angle [ex: IK_angle = 163°]
+      float lerp_measure = meas_down + (IK_angle -real_down) * (meas_up -meas_down) / (real_up -real_down);
+      //                        164  +      (163 -160)       *    (171 -164)        /     (165 -160)
+      //                      = 168.2
+
+      // Correction
+      float error = lerp_measure -IK_angle;
+      // 168.2 -163 = 5.2
+      // 163 -(168.2 -163) = 5.2
+
+      return round( IK_angle -error );
+      // 163 -5.2 = 157.8 ==> 158°
+    }
+  }
+
+  return IK_angle; // outside calibration range
+}
+
+int MG995_correction_FK(int potAngle) {
+  int tableSize = sizeof(MG995_table) / sizeof(MG995_table[0]);
+
+  int real_down = MG995_table[i   ].real;
+  int real_up   = MG995_table[i +1].real;
+
+  int meas_down = MG995_table[i   ].measured;
+  int meas_up   = MG995_table[i +1].measured;
+
+  for(int i = 0; i < tableSize -1; i++) {
+
+    if(potAngle >= meas_down
+    && potAngle <= meas_up) {
+
+      // [ex: potAngle = 167°]
+      float ratio = (potAngle -meas_down) / (meas_up -meas_down);
+      //   0.43 =      (167 -164)       /     (171 -164)
+
+      return round( real_down + ratio * (real_up -real_down) );
+      //           160 +  0.43 *     (165 -160)
+    }
+  }
+
+  return potAngle;
+}
 
 
 // ====================================================
@@ -118,7 +200,10 @@ void initController() {
   int shoulder_potAngle = readAngle( shoulderPot );
   int elbow_potAngle    = readAngle( elbowPot    );
   int wrist_potAngle    = readAngle( wristPot    );
-  
+
+  shoulder_potAngle     = MG995_correction_FK(shoulder_potAngle);
+  elbow_potAngle        = MG995_correction_FK(elbow_potAngle   );
+
   servo_base       .attach(3);
   servo_shoulder_L .attach(4);
   servo_shoulder_R .attach(5);
@@ -128,18 +213,18 @@ void initController() {
   servo_wrist_R    .attach(9);
   servo_wrist_roll .attach(10);
 
-  servo_base       .write(     base_potAngle     -rig.ofst_base                   );
+  servo_base       .write(     base_potAngle     -rig.ofst_base                 );
 
-  servo_shoulder_L .write(     shoulder_potAngle +rig.ofst_MG995                  );
-  servo_shoulder_R .write(180 -shoulder_potAngle -rig.ofst_MG995 +rig.mir_sho_ofst);
+  servo_shoulder_L .write(     shoulder_potAngle +rig.ofst_sho                  );
+  servo_shoulder_R .write(180 -shoulder_potAngle -rig.ofst_sho +rig.mir_sho_ofst);
   
-  servo_elbow_L    .write(180 -elbow_potAngle    +rig.ofst_MG995 +rig.mir_elb_ofst);
-  servo_elbow_R    .write(     elbow_potAngle    -rig.ofst_MG995                  );
+  servo_elbow_L    .write(180 -elbow_potAngle    +rig.ofst_elb +rig.mir_elb_ofst);
+  servo_elbow_R    .write(     elbow_potAngle    -rig.ofst_elb                  );
   
-  servo_wrist_L    .write(     wrist_potAngle    -rig.ofst_wri                    );
-  servo_wrist_R    .write(180 -wrist_potAngle    +rig.ofst_wri   +rig.mir_wri_ofst);
+  servo_wrist_L    .write(     wrist_potAngle    +rig.ofst_wri                  );
+  servo_wrist_R    .write(180 -wrist_potAngle    -rig.ofst_wri +rig.mir_wri_ofst);
   
-  servo_wrist_roll .write(     start_wristRoll                                    );
+  servo_wrist_roll .write(     start_wristRoll                                  );
 
   delay(1500);
 
@@ -147,6 +232,8 @@ void initController() {
   shoulder_potAngle = readAngle( shoulderPot );
   elbow_potAngle    = readAngle( elbowPot    );
   wrist_potAngle    = readAngle( wristPot    );
+  shoulder_potAngle = MG995_correction_FK(shoulder_potAngle);
+  elbow_potAngle    = MG995_correction_FK(elbow_potAngle   );
 
   // Serial.print  (F("base : "));
   // Serial.println( base_potAngle );
@@ -212,7 +299,7 @@ void manuAngleMove(char* cmd_Buff) {
   *colon = '\0'; // Split the string into two parts
 
   char* axisName = cmd_Buff;
-  int angle      = atoi(colon + 1);
+  int   angle    = atoi(colon + 1);
 
 
   // =======================================================

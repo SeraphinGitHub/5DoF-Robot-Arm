@@ -31,7 +31,15 @@
     int maxRange;      // Range value between 0° to 270°
   };
 
+  struct CalibrationTable {
+    float real;
+    float measured;
+  };
+
   extern const  Rig rig;
+  extern bool   isMoving;
+  extern float  moveSpeed;
+  extern int    wrist_roll_angle;
   
   extern CartesianPos homeCoords;
   extern CartesianPos currentPos;
@@ -40,8 +48,8 @@
   int  readAngle    (const Pot& pot);
   int  limitRange   (int angle, const Pot& pot);
 
-  int MG995_correction_IK(float IK_angle);
-  int MG995_correction_FK(int potAngle);
+  int servo_correction_IK(float IK_angle, CalibrationTable table);
+  int servo_correction_FK(int potAngle,   CalibrationTable table);
   
   void initController();
   void manuAngleMove(char* cmd_Buff);

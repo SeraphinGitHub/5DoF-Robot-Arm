@@ -5,9 +5,9 @@
   struct JointAngles {
 
     float epsilon;
+    float tau;
     float gamma;
     float lambda;
-    float tau;
   };
 
   JointAngles inverseKinematics(

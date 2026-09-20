@@ -30,6 +30,7 @@ CartesianPos forwardKinematics(
   
   float alpha   = (PI -gamma) *0.5; // PI = 180°
   float beta    = tau -alpha;
+  // float phi     = PI *0.5 -beta;
   float phi     = PI -lambda -alpha;
   float w       = l *cos(alpha) *2;
   float d       = w *cos(beta);

@@ -39,23 +39,22 @@ const Rig rig = {
 // 135° > 794 ==> measured
 // 180° > 1048
 
-const Pot basePot     = { A0,  0, 1023, 24, 160 };
 // const Pot basePot     = { A0, 31, 1048, 24, 160 };
-const Pot shoulderPot = { A1, 798, 117, 24, 180 };
-// const Pot elbowPot    = { A2, 211, 856, 24, 180 };
-const Pot elbowPot    = { A2, 211, 856, 0, 180 };
+
+const Pot basePot     = { A0,  0, 1023, 24, 160 };
+const Pot shoulderPot = { A1, 798, 117,  0, 180 };
+const Pot elbowPot    = { A2, 211, 856,  0, 180 };
 const Pot wristPot    = { A3, 940, 244,  0, 180 };
 
-
-
-
-
-struct CalibrationTable {
-  float real;
-  float measured;
+CalibrationTable base_table[] = {
+  {   0,  46 },
+  {  45,  74 },
+  {  90,  96 },
+  { 135, 122 },
+  { 180, 147 }
 };
 
-CalibrationTable MG995_table[] = {
+CalibrationTable elbow_table[] = {
   {   5,   2 },
   {  10,   5 },
   {  15,  10 },
@@ -94,17 +93,53 @@ CalibrationTable MG995_table[] = {
   { 180, 190 }
 };
 
+CalibrationTable shoulder_table[] = {
+  { 160, 162 },
+  { 155, 159 },
+  { 150, 153 },
+  { 145, 147 },
+  { 140, 142 },
+  { 135, 136 },
+  { 130, 130 },
+  { 125, 125 },
+  { 120, 119 },
+  { 115, 114 },
+  { 110, 108 },
+  { 105, 103 },
+  { 100,  98 },
+  {  95,  93 },
+  {  90,  88 },
+  {  85,  82 },
+  {  80,  77 },
+  {  75,  71 },
+  {  70,  68 },
+  {  65,  64 },
+  {  60,  59 },
+  {  55,  54 },
+  {  50,  50 },
+  {  45,  45 },
+  {  40,  40 },
+  {  35,  35 },
+  {  30,  30 },
+  {  25,  24 },
+  {  20,  19 },
+  {  15,  13 },
+  {  10,   7 },
+  {   5,   1 },
+  {   0,  -3 }
+};
 
-int MG995_correction_IK(float IK_angle) {
-  int tableSize = sizeof(MG995_table) / sizeof(MG995_table[0]);
+
+int servo_correction_IK(float IK_angle, CalibrationTable servoTable[]) {
+  int tableSize = sizeof(servoTable) / sizeof(servoTable[0]);
 
   for(int i = 0; i < tableSize -1; i++) {
 
-    float real_down = MG995_table[i   ].real;
-    float real_up   = MG995_table[i +1].real;
+    float real_down = servoTable[i   ].real;
+    float real_up   = servoTable[i +1].real;
 
-    float meas_down = MG995_table[i   ].measured;
-    float meas_up   = MG995_table[i +1].measured;
+    float meas_down = servoTable[i   ].measured;
+    float meas_up   = servoTable[i +1].measured;
 
     if(IK_angle >= real_down
     && IK_angle <= real_up) {
@@ -127,16 +162,16 @@ int MG995_correction_IK(float IK_angle) {
   return IK_angle; // outside calibration range
 }
 
-int MG995_correction_FK(int potAngle) {
-  int tableSize = sizeof(MG995_table) / sizeof(MG995_table[0]);
-
-  int real_down = MG995_table[i   ].real;
-  int real_up   = MG995_table[i +1].real;
-
-  int meas_down = MG995_table[i   ].measured;
-  int meas_up   = MG995_table[i +1].measured;
+int servo_correction_FK(int potAngle, CalibrationTable servoTable[]) {
+  int tableSize = sizeof(servoTable) / sizeof(servoTable[0]);
 
   for(int i = 0; i < tableSize -1; i++) {
+
+    int real_down = servoTable[i   ].real;
+    int real_up   = servoTable[i +1].real;
+
+    int meas_down = servoTable[i   ].measured;
+    int meas_up   = servoTable[i +1].measured;
 
     if(potAngle >= meas_down
     && potAngle <= meas_up) {
@@ -145,8 +180,10 @@ int MG995_correction_FK(int potAngle) {
       float ratio = (potAngle -meas_down) / (meas_up -meas_down);
       //   0.43 =      (167 -164)       /     (171 -164)
 
-      return round( real_down + ratio * (real_up -real_down) );
+      int correctedAngle = round( real_down + ratio * (real_up -real_down) );
       //           160 +  0.43 *     (165 -160)
+
+      return correctedAngle;
     }
   }
 
@@ -166,9 +203,9 @@ Servo servo_wrist_L;
 Servo servo_wrist_R;
 Servo servo_wrist_roll;
 
-const float reachRange   = 1;
-const float moveSpeed    = 60.0; // mm/s (smaller more precise)
-const float stepInterval = 6.5;  // ms   (ms between steps > smaller more precise)
+float reachRange   = 1;
+float moveSpeed    = 80.0; // mm/s (smaller more precise)
+float stepInterval = 6.0;  // ms   (ms between steps > smaller more precise)
 
 
 // ====================================================
@@ -176,8 +213,9 @@ const float stepInterval = 6.5;  // ms   (ms between steps > smaller more precis
 // ====================================================
 unsigned long lastStepTime = 0;
 
-bool isHome   = false;
-bool isMoving = false;
+bool isHome     = false;
+bool isMoving   = false;
+bool isPrevInit = false;
 
 // Previous position in Degrees
 int prev_base        = -1;
@@ -186,7 +224,7 @@ int prev_elbow       = -1;
 int prev_wrist       = -1;
 int prev_wrist_roll  = -1;
 
-int start_wristRoll  = 90;
+int wrist_roll_angle = 90;
 
 
 // ====================================================
@@ -196,13 +234,7 @@ void initController() {
  
   delay(200);
 
-  int base_potAngle     = readAngle( basePot     );
-  int shoulder_potAngle = readAngle( shoulderPot );
-  int elbow_potAngle    = readAngle( elbowPot    );
-  int wrist_potAngle    = readAngle( wristPot    );
-
-  shoulder_potAngle     = MG995_correction_FK(shoulder_potAngle);
-  elbow_potAngle        = MG995_correction_FK(elbow_potAngle   );
+  isPrevInit = false;
 
   servo_base       .attach(3);
   servo_shoulder_L .attach(4);
@@ -213,44 +245,48 @@ void initController() {
   servo_wrist_R    .attach(9);
   servo_wrist_roll .attach(10);
 
-  servo_base       .write(     base_potAngle     -rig.ofst_base                 );
+  int baseFKAngle       = servo_correction_FK(readAngle( basePot     ), base_table    );
+  int shoulder_potAngle = servo_correction_FK(readAngle( shoulderPot ), shoulder_table);
+  int elbow_potAngle    = servo_correction_FK(readAngle( elbowPot    ), elbow_table   );
+  int wrist_potAngle    = readAngle( wristPot );
 
+  int baseServoAngle    = round( (baseFKAngle -basePot.minRange) * 180.0f / (float)(basePot.maxRange -basePot.minRange) ); // for 270° servo
+
+  // ****************************************************************************
+  servo_base       .write(     baseServoAngle                                    );
+  // ****************************************************************************
   servo_shoulder_L .write(     shoulder_potAngle +rig.ofst_sho                  );
   servo_shoulder_R .write(180 -shoulder_potAngle -rig.ofst_sho +rig.mir_sho_ofst);
-  
+  // ****************************************************************************
   servo_elbow_L    .write(180 -elbow_potAngle    +rig.ofst_elb +rig.mir_elb_ofst);
   servo_elbow_R    .write(     elbow_potAngle    -rig.ofst_elb                  );
-  
+  // ****************************************************************************
   servo_wrist_L    .write(     wrist_potAngle    +rig.ofst_wri                  );
   servo_wrist_R    .write(180 -wrist_potAngle    -rig.ofst_wri +rig.mir_wri_ofst);
-  
-  servo_wrist_roll .write(     start_wristRoll                                  );
+  // ****************************************************************************
+  servo_wrist_roll .write(     wrist_roll_angle                                 );
+  // ****************************************************************************
 
-  delay(1500);
+  delay(1000);
 
-  base_potAngle     = readAngle( basePot     );
-  shoulder_potAngle = readAngle( shoulderPot );
-  elbow_potAngle    = readAngle( elbowPot    );
-  wrist_potAngle    = readAngle( wristPot    );
-  shoulder_potAngle = MG995_correction_FK(shoulder_potAngle);
-  elbow_potAngle    = MG995_correction_FK(elbow_potAngle   );
+  baseFKAngle       = servo_correction_FK(readAngle( basePot     ), base_table    );
+  shoulder_potAngle = servo_correction_FK(readAngle( shoulderPot ), shoulder_table);
+  elbow_potAngle    = servo_correction_FK(readAngle( elbowPot    ), elbow_table   );
+  wrist_potAngle    = readAngle( wristPot );
 
-  // Serial.print  (F("base : "));
-  // Serial.println( base_potAngle );
-  // Serial.print  (F("shoulder : "));
-  // Serial.println( shoulder_potAngle );
-  // Serial.print  (F("elbow : "));
-  // Serial.println( elbow_potAngle );
-  // Serial.print  (F("wrist : "));
-  // Serial.println( wrist_potAngle );
+  int dirMultiplier = baseFKAngle < 95 ? -1 : 1;
 
   currentPos = forwardKinematics(
-    base_potAngle,
+    baseFKAngle + basePot.minRange *dirMultiplier,
     shoulder_potAngle,
     elbow_potAngle,
     wrist_potAngle
   );
 
+  targetPos = currentPos;
+
+  setTargetTo(homeCoords);
+  
   Serial.print  (F("RES:CONNECTED > at : X"));
   Serial.print  ( floor(currentPos.x) );
   Serial.print  (F(" Y"));
@@ -312,6 +348,8 @@ void manuAngleMove(char* cmd_Buff) {
     
     delay(1500);
     Serial.print  (F("base potAngle : "));
+    Serial.print  (angle);
+    Serial.print  (F(" > "));
     Serial.println( readAngle(basePot)  );
   }
 
@@ -327,6 +365,8 @@ void manuAngleMove(char* cmd_Buff) {
         
     delay(1500);
     Serial.print  (F("shoulder potAngle : "));
+    Serial.print  (angle);
+    Serial.print  (F(" > "));
     Serial.println( readAngle(shoulderPot)  );
   }
 
@@ -342,6 +382,8 @@ void manuAngleMove(char* cmd_Buff) {
             
     delay(1500);
     Serial.print  (F("elbow potAngle : "));
+    Serial.print  (angle);
+    Serial.print  (F(" > "));
     Serial.println( readAngle(elbowPot)  );
   }
 
@@ -357,6 +399,8 @@ void manuAngleMove(char* cmd_Buff) {
                 
     delay(1500);
     Serial.print  (F("wrist potAngle : "));
+    Serial.print  (angle);
+    Serial.print  (F(" > "));
     Serial.println( readAngle(wristPot)  );
   }
 
@@ -378,7 +422,15 @@ void setTargetTo(CartesianPos coords) {
 }
 
 void moveServosTo(CartesianPos coords) {
-
+  
+  // Serial.println("*********************");
+  // Serial.print("x: ");
+  // Serial.print(coords.x);
+  // Serial.print(", y:");
+  // Serial.print(coords.y);
+  // Serial.print(", z:");
+  // Serial.println(coords.z);
+  
   JointAngles angles = inverseKinematics(coords.x, coords.y, coords.z);
 
   // Safe limit
@@ -389,34 +441,46 @@ void moveServosTo(CartesianPos coords) {
     return;
   }
 
-  int base_angle     = (int)angles.epsilon ;
-  int shoulder_angle = (int)angles.tau      ;
-  int elbow_angle    = (int)angles.gamma   ;
-  int wrist_angle    = (int)angles.lambda  ;
+  int base_angle     = round( basePot.minRange + (angles.epsilon * (float)(basePot.maxRange -basePot.minRange) / 180.0f) ); // for 270° servo
+  int shoulder_angle = servo_correction_IK((int)angles.tau,   shoulder_table);
+  int elbow_angle    = servo_correction_IK((int)angles.gamma, elbow_table   );
+  int wrist_angle    = (int)angles.lambda;
 
   int safe_base      = limitRange(base_angle,     basePot       );
   int safe_shoulder  = limitRange(shoulder_angle, shoulderPot   );
   int safe_elbow     = limitRange(elbow_angle,    elbowPot      );
   int safe_wrist     = limitRange(wrist_angle,    wristPot      );
+
+  // Initialize prev values (Only once)
+  if(!isPrevInit) {
+    prev_base       = safe_base;
+    prev_shoulder   = safe_shoulder;
+    prev_elbow      = safe_elbow;
+    prev_wrist      = safe_wrist;
+    prev_wrist_roll = wrist_roll_angle;
+    
+    isPrevInit = true;
+  }
   
+  // ****************************************************************************
   if(isNewValue(prev_base, safe_base)) {
-    servo_base       .write(     safe_base    + rig.ofst_base                  );
-  }
-
+    servo_base       .write(     safe_base                                      );
+  } // **************************************************************************
   if(isNewValue(prev_shoulder, safe_shoulder)) {
-    servo_shoulder_L .write(     safe_shoulder  + rig.ofst_sho                );
-    servo_shoulder_R .write(180 -safe_shoulder  -rig.ofst_sho +rig.mir_sho_ofst);
-  }
-
+    servo_shoulder_L .write(     safe_shoulder  + rig.ofst_sho                  );
+    servo_shoulder_R .write(180 -safe_shoulder  - rig.ofst_sho +rig.mir_sho_ofst);
+  }// ***************************************************************************
   if(isNewValue(prev_elbow, safe_elbow)) {
     servo_elbow_L    .write(180 -safe_elbow    - rig.ofst_elb  +rig.mir_elb_ofst);
-    servo_elbow_R    .write(     safe_elbow    + rig.ofst_elb                  );
-  }
-
+    servo_elbow_R    .write(     safe_elbow    + rig.ofst_elb                   );
+  }// ***************************************************************************
   if(isNewValue(prev_wrist, safe_wrist)) {
-    servo_wrist_L    .write(     safe_wrist     + rig.ofst_wri                );
+    servo_wrist_L    .write(     safe_wrist     + rig.ofst_wri                  );
     servo_wrist_R    .write(180 -safe_wrist     - rig.ofst_wri +rig.mir_wri_ofst);
-  }
+  }// ***************************************************************************
+  if(isNewValue(prev_wrist_roll, wrist_roll_angle)) {
+    servo_wrist_roll .write(     wrist_roll_angle                               );
+  } // **************************************************************************
 }
 
 void linear_Interpolation() {
@@ -446,12 +510,12 @@ void linear_Interpolation() {
 
     Serial.println(F("RES:ARRIVED"));
 
-    // Serial.print  (F("Arrived at :   X "));
-    // Serial.print  ( targetPos.x  );
-    // Serial.print  (F("   Y "));
-    // Serial.print  ( targetPos.y  );
-    // Serial.print  (F("   Z "));
-    // Serial.println( targetPos.z  );
+    Serial.print  (F("Arrived at :   X "));
+    Serial.print  ( targetPos.x  );
+    Serial.print  (F("   Y "));
+    Serial.print  ( targetPos.y  );
+    Serial.print  (F("   Z "));
+    Serial.println( targetPos.z  );
 
     return;
   }

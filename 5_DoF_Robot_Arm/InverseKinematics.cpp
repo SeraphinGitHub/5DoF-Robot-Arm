@@ -9,9 +9,9 @@ JointAngles inverseKinematics(float x ,float y ,float z) {
   JointAngles angles;
 
   angles.epsilon = NAN;
+  angles.tau     = NAN;
   angles.gamma   = NAN;
   angles.lambda  = NAN;
-  angles.tau     = NAN;
   
   // Robot dimensions in mm
   float c = rig.c; // Base height
@@ -50,9 +50,9 @@ JointAngles inverseKinematics(float x ,float y ,float z) {
   float tau      = wZ > c ? alpha +beta : alpha -beta;
 
   angles.epsilon = degrees( epsilon );
+  angles.tau     = degrees( tau     );
   angles.gamma   = degrees( gamma   );
   angles.lambda  = degrees( lambda  );
-  angles.tau     = degrees( tau     );
   
   // X80 Y350 Z150
   // Serial.println("*****************************************");

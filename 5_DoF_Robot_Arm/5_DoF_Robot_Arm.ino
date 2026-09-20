@@ -7,6 +7,65 @@
 #include "headers/MotionController.h"
 
 
+bool demoRunning = false;
+int demoStep = 0;
+
+void startDemo() {
+  demoRunning = true;
+  demoStep = 0;
+
+  setTargetTo(parseGcodeLine("X150 Y200 Z300"));
+}
+
+void updateDemo() {
+
+  if (!demoRunning) return;
+
+  if (isMoving) return;
+
+  demoStep++;
+
+  if (demoStep >= 6) {
+    demoStep = 0;   // repeat forever
+  }
+
+  switch (demoStep) {
+
+    case 0:
+      setTargetTo(parseGcodeLine("X150 Y200 Z300"));
+      break;
+
+    case 1:
+      setTargetTo(parseGcodeLine("X-100 Y150 Z180"));
+      wrist_roll_angle = 45;
+      break;
+
+    case 2:
+      setTargetTo(parseGcodeLine("X-200 Y100 Z300"));
+      wrist_roll_angle = 60;
+      break;
+
+    case 3:
+      setTargetTo(parseGcodeLine("X150 Y200 Z300"));
+      wrist_roll_angle = 90;
+      break;
+
+    case 4:
+      setTargetTo(parseGcodeLine("Y100 Z100"));
+      wrist_roll_angle = 135;
+      break;
+
+    case 5:
+      setTargetTo(parseGcodeLine("X150 Y200 Z300"));
+      wrist_roll_angle = 90;
+      break;
+  }
+}
+
+
+
+
+
 bool hasInit = false;
 char cmd_Buff[64];
 
@@ -47,6 +106,17 @@ void loop() {
       return;
     }
 
+    if(strcmp(cmd_Buff, "demo") == 0) {
+      startDemo();
+      return;
+    }
+
+    if(strcmp(cmd_Buff, "end") == 0) {
+      demoRunning = false;
+      setTargetTo(homeCoords);
+      return;
+    }
+
     // **********************
     // manuAngleMove(cmd_Buff);
     // **********************
@@ -60,5 +130,7 @@ void loop() {
   }
 
   linear_Interpolation();
+  updateDemo();
+
 }
 

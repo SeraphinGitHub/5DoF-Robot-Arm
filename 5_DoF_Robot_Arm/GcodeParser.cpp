@@ -3,10 +3,6 @@
 #include "headers/GcodeParser.h"
 #include "headers/MotionController.h"
 
-float old_X = currentPos.x;
-float old_Y = currentPos.y;
-float old_Z = currentPos.z;
-
 // Read one G-code line at a time from UGS
 CartesianPos parseGcodeLine(String gcodeLine) {
   
@@ -34,13 +30,9 @@ CartesianPos parseGcodeLine(String gcodeLine) {
   int index_G     = gcodeLine.indexOf("G");
   coords.moveType = extractCoord(gcodeLine, index_G, "int");
 
-  if(!isnan(coords.x)) old_X = coords.x;
-  if(!isnan(coords.y)) old_Y = coords.y;
-  if(!isnan(coords.z)) old_Z = coords.z;
-
-  if(isnan(coords.x) && !isnan(old_X)) coords.x = old_X;
-  if(isnan(coords.y) && !isnan(old_Y)) coords.y = old_Y;
-  if(isnan(coords.z) && !isnan(old_Z)) coords.z = old_Z;
+  if(isnan(coords.x)) coords.x = currentPos.x;
+  if(isnan(coords.y)) coords.y = currentPos.y;
+  if(isnan(coords.z)) coords.z = currentPos.z;
 
   // Serial.print   ("MoveType: ");
   // Serial.print   (coords.moveType);

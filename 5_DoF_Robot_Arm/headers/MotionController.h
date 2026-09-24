@@ -44,19 +44,16 @@
   extern CartesianPos homeCoords;
   extern CartesianPos currentPos;
 
-  bool isNewValue   (int &prevAngle, int newAngle);
-  int  readAngle    (const Pot& pot);
-  int  limitRange   (int angle, const Pot& pot);
-
-  int servo_correction_IK(float IK_angle, CalibrationTable table);
-  int servo_correction_FK(int potAngle,   CalibrationTable table);
+  bool isNewValue           (int &prevAngle, int newAngle);
+  int  readAngle            (const Pot& pot);
+  int  limitRange           (int angle, const Pot& pot);
+  int  servo_correction_IK  (float IK_angle, CalibrationTable table);
+  int  servo_correction_FK  (int potAngle,   CalibrationTable table);
   
-  void initController();
-  void manuAngleMove(char* cmd_Buff);
-  void setTargetTo  (CartesianPos coords);
-  void moveServosTo (CartesianPos coords);
-  void linear_Interpolation();
-
-
+  void initController       ();
+  void manuAngleMove        (char* cmd_Buff);
+  void setTargetTo          (CartesianPos coords);
+  void moveServosTo         (CartesianPos coords);
+  void linear_Interpolation ();
 
 #endif

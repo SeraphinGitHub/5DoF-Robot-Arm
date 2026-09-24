@@ -6,11 +6,14 @@
 #include "headers/InverseKinematics.h"
 #include "headers/ForwardKinematics.h"
 
-
-String       home_Gcode = "G1 X0 Y100 Z200";
-CartesianPos homeCoords = { 0, 100, 200, 1 };
-CartesianPos currentPos;
-CartesianPos targetPos;
+Servo servo_base;
+Servo servo_shoulder_L;
+Servo servo_shoulder_R;
+Servo servo_elbow_L;
+Servo servo_elbow_R;
+Servo servo_wrist_L;
+Servo servo_wrist_R;
+Servo servo_wrist_roll;
 
 // ====================================================
 // Robot dimensions (mm)
@@ -32,19 +35,42 @@ const Rig rig = {
   0,    // mir_wri_ofst mirror offset in degrees
 };
 
-// base potAngle:
-//   0° >  31
-//  45° > 285 ==> measured
-//  90° > 540
-// 135° > 794 ==> measured
-// 180° > 1048
-
-// const Pot basePot     = { A0, 31, 1048, 24, 160 };
-
 const Pot basePot     = { A0,  0, 1023, 24, 160 };
 const Pot shoulderPot = { A1, 798, 117,  0, 180 };
 const Pot elbowPot    = { A2, 211, 856,  0, 180 };
 const Pot wristPot    = { A3, 940, 244,  0, 180 };
+
+// ====================================================
+// Vars
+// ====================================================
+CartesianPos homeCoords = { 0, 100, 200, 1 };
+CartesianPos currentPos;
+CartesianPos targetPos;
+
+unsigned long lastStepTime = 0;
+
+const float reachRange   =    1;
+const float stepInterval =  6.0;  // ms   (ms between steps > smaller more precise)
+const float maxSpeed     = 60.0;  // mm/s (smaller more precise)
+const float accelDist    = 20.0;  // mm
+const float decelDist    = 15.0;  // mm
+float       currentSpeed =  0.0;
+
+const float acceleration = (maxSpeed *maxSpeed) / (2.0f *accelDist);
+const float deceleration = (maxSpeed *maxSpeed) / (2.0f *decelDist);
+
+bool isHome     = false;
+bool isMoving   = false;
+bool isPrevInit = false;
+
+int prev_base        = -1;
+int prev_shoulder    = -1;
+int prev_elbow       = -1;
+int prev_wrist       = -1;
+int prev_wrist_roll  = -1;
+
+int wrist_roll_angle = 90;
+
 
 CalibrationTable base_table[] = {
   {   0,  46 },
@@ -130,6 +156,27 @@ CalibrationTable shoulder_table[] = {
 };
 
 
+// ====================================================
+// Vars Methods
+// ====================================================
+bool isNewValue(int &prevAngle, int newAngle) {
+
+  if(prevAngle == newAngle) return false;
+
+  prevAngle = newAngle;
+  return true;
+}
+
+int  readAngle (const Pot& pot) {
+
+  return map( analogRead(pot.pin), pot.min, pot.max, pot.minRange, pot.maxRange );
+}
+
+int  limitRange(int angle, const Pot& pot) {
+
+  return constrain(angle, pot.minRange, pot.maxRange);
+}
+
 int servo_correction_IK(float IK_angle, CalibrationTable servoTable[]) {
   int tableSize = sizeof(servoTable) / sizeof(servoTable[0]);
 
@@ -189,42 +236,6 @@ int servo_correction_FK(int potAngle, CalibrationTable servoTable[]) {
 
   return potAngle;
 }
-
-
-// ====================================================
-// Constants
-// ====================================================
-Servo servo_base;
-Servo servo_shoulder_L;
-Servo servo_shoulder_R;
-Servo servo_elbow_L;
-Servo servo_elbow_R;
-Servo servo_wrist_L;
-Servo servo_wrist_R;
-Servo servo_wrist_roll;
-
-float reachRange   = 1;
-float moveSpeed    = 80.0; // mm/s (smaller more precise)
-float stepInterval = 6.0;  // ms   (ms between steps > smaller more precise)
-
-
-// ====================================================
-// Vars
-// ====================================================
-unsigned long lastStepTime = 0;
-
-bool isHome     = false;
-bool isMoving   = false;
-bool isPrevInit = false;
-
-// Previous position in Degrees
-int prev_base        = -1;
-int prev_shoulder    = -1;
-int prev_elbow       = -1;
-int prev_wrist       = -1;
-int prev_wrist_roll  = -1;
-
-int wrist_roll_angle = 90;
 
 
 // ====================================================
@@ -293,28 +304,6 @@ void initController() {
   Serial.print  ( floor(currentPos.y) );
   Serial.print  (F(" Z"));
   Serial.println( floor(currentPos.z) );
-}
-
-
-// ====================================================
-// Vars Methods
-// ====================================================
-bool isNewValue(int &prevAngle, int newAngle) {
-
-  if(prevAngle == newAngle) return false;
-
-  prevAngle = newAngle;
-  return true;
-}
-
-int  readAngle (const Pot& pot) {
-
-  return map( analogRead(pot.pin), pot.min, pot.max, pot.minRange, pot.maxRange );
-}
-
-int  limitRange(int angle, const Pot& pot) {
-
-  return constrain(angle, pot.minRange, pot.maxRange);
 }
 
 
@@ -446,10 +435,10 @@ void moveServosTo(CartesianPos coords) {
   int elbow_angle    = servo_correction_IK((int)angles.gamma, elbow_table   );
   int wrist_angle    = (int)angles.lambda;
 
-  int safe_base      = limitRange(base_angle,     basePot       );
-  int safe_shoulder  = limitRange(shoulder_angle, shoulderPot   );
-  int safe_elbow     = limitRange(elbow_angle,    elbowPot      );
-  int safe_wrist     = limitRange(wrist_angle,    wristPot      );
+  int safe_base      = limitRange(base_angle,     basePot    );
+  int safe_shoulder  = limitRange(shoulder_angle, shoulderPot);
+  int safe_elbow     = limitRange(elbow_angle,    elbowPot   );
+  int safe_wrist     = limitRange(wrist_angle,    wristPot   );
 
   // Initialize prev values (Only once)
   if(!isPrevInit) {
@@ -464,49 +453,56 @@ void moveServosTo(CartesianPos coords) {
   
   // ****************************************************************************
   if(isNewValue(prev_base, safe_base)) {
-    servo_base       .write(     safe_base                                      );
+    servo_base       .write(     safe_base                                       );
   } // **************************************************************************
   if(isNewValue(prev_shoulder, safe_shoulder)) {
-    servo_shoulder_L .write(     safe_shoulder  + rig.ofst_sho                  );
-    servo_shoulder_R .write(180 -safe_shoulder  - rig.ofst_sho +rig.mir_sho_ofst);
+    servo_shoulder_L .write(     safe_shoulder  + rig.ofst_sho                   );
+    servo_shoulder_R .write(180 -safe_shoulder  - rig.ofst_sho +rig.mir_sho_ofst );
   }// ***************************************************************************
   if(isNewValue(prev_elbow, safe_elbow)) {
-    servo_elbow_L    .write(180 -safe_elbow    - rig.ofst_elb  +rig.mir_elb_ofst);
-    servo_elbow_R    .write(     safe_elbow    + rig.ofst_elb                   );
+    servo_elbow_L    .write(180 -safe_elbow     - rig.ofst_elb  +rig.mir_elb_ofst);
+    servo_elbow_R    .write(     safe_elbow     + rig.ofst_elb                   );
   }// ***************************************************************************
   if(isNewValue(prev_wrist, safe_wrist)) {
-    servo_wrist_L    .write(     safe_wrist     + rig.ofst_wri                  );
-    servo_wrist_R    .write(180 -safe_wrist     - rig.ofst_wri +rig.mir_wri_ofst);
+    servo_wrist_L    .write(     safe_wrist     + rig.ofst_wri                   );
+    servo_wrist_R    .write(180 -safe_wrist     - rig.ofst_wri +rig.mir_wri_ofst );
   }// ***************************************************************************
   if(isNewValue(prev_wrist_roll, wrist_roll_angle)) {
-    servo_wrist_roll .write(     wrist_roll_angle                               );
+    servo_wrist_roll .write(     wrist_roll_angle                                );
   } // **************************************************************************
 }
+
 
 void linear_Interpolation() {
 
   unsigned long now = millis();
 
-  if(!isMoving || now - lastStepTime < stepInterval) return;
+  if(!isMoving || now -lastStepTime < stepInterval) return;
 
-  lastStepTime = now;
+  float deltaTime = (now -lastStepTime) /1000.0f;
+  lastStepTime    = now;
 
-  float dx = targetPos.x - currentPos.x;
-  float dy = targetPos.y - currentPos.y;
-  float dz = targetPos.z - currentPos.z;
+  float distX = targetPos.x -currentPos.x;
+  float distY = targetPos.y -currentPos.y;
+  float distZ = targetPos.z -currentPos.z;
 
-  float dist = sqrt(dx*dx + dy*dy + dz*dz);
+  float distance_3D = sqrt(distX*distX + distY*distY + distZ*distZ);
 
   // Serial.print("Dist : ");   Serial.println(dist);
   // Serial.print("Targ X : "); Serial.println(targetPos.x);
   // Serial.print("Targ Y : "); Serial.println(targetPos.y);
   // Serial.print("Targ Z : "); Serial.println(targetPos.z);
 
-  if(isnan(dist)) return;
+  if(isnan(distance_3D)) return;
 
-  if(dist <= reachRange) {
 
-    isMoving = false;
+  // ==============================================
+  // Arrived at targetPos
+  // ==============================================
+  if(distance_3D <= reachRange) {
+
+    currentSpeed = 0.0f;
+    isMoving     = false;
 
     Serial.println(F("RES:ARRIVED"));
 
@@ -520,18 +516,43 @@ void linear_Interpolation() {
     return;
   }
 
-  // Normalize direction
-  float invDist = 1.0 /dist;
-  float ux = dx *invDist;
-  float uy = dy *invDist;
-  float uz = dz *invDist;
 
-  // Move by step size
-  float stepSize = moveSpeed * (stepInterval /1000.0);  // mm per frame
+  // ==============================================
+  // Acceleration / Deceleration
+  // ==============================================
+  float stoppingDist = (currentSpeed *currentSpeed) / (2.0f *deceleration);
+
+  // Decelerate
+  if(distance_3D <= stoppingDist) {
+    currentSpeed -= deceleration *deltaTime;
+    if(currentSpeed < 0.0f) currentSpeed = 0.0f;
+  }
+  
+  // Accelerate
+  else {
+    currentSpeed += acceleration *deltaTime;
+    if(currentSpeed > maxSpeed) currentSpeed = maxSpeed;
+  }
+
+
+  // ==============================================
+  // Direction
+  // ==============================================
+  float invRemainDist = 1.0 /distance_3D;
+  float ux = distX *invRemainDist;
+  float uy = distY *invRemainDist;
+  float uz = distZ *invRemainDist;
+
+
+  // ==============================================
+  // Step move
+  // ==============================================
+  float stepSize = currentSpeed *deltaTime;
 
   currentPos.x += ux *stepSize;
   currentPos.y += uy *stepSize;
   currentPos.z += uz *stepSize;
+
 
   moveServosTo(currentPos);
 }

@@ -4,24 +4,27 @@
 #include "headers/MotionController.h"
 
 
-CartesianPos forwardKinematics(
+Position forwardKinematics(
   float  deg_epsilon,
   float  deg_tau,
   float  deg_gamma,
   float  deg_lambda
 ) {
   
-  CartesianPos coords;
+  Position newPos;
 
-  coords.x = NAN;
-  coords.y = NAN;
-  coords.z = NAN;
+  newPos.x        = NAN;
+  newPos.y        = NAN;
+  newPos.z        = NAN;
+  newPos.pitch    = homePos.pitch;
+  newPos.roll     = homePos.roll;
+  newPos.moveType = homePos.moveType;
 
   // Robot dimensions in mm
-  float c = rig.c; // Base height
-  float l = rig.l; // Arms lengths (both the same size)
-  float g = rig.g; // Y tool's offset
-  float f = rig.f; // Z tool's offset
+  float c       = rig.c; // Base height
+  float l       = rig.l; // Arms lengths (both the same size)
+  float g       = rig.g; // Y tool's offset
+  float f       = rig.f; // Z tool's offset
   
   float epsilon = radians( deg_epsilon );
   float tau     = radians( deg_tau     );
@@ -30,26 +33,24 @@ CartesianPos forwardKinematics(
   
   float alpha   = (PI -gamma) *0.5; // PI = 180°
   float beta    = tau -alpha;
-  // float phi     = PI *0.5 -beta;
   float phi     = PI -lambda -alpha;
   float w       = l *cos(alpha) *2;
   float d       = w *cos(beta);
   float e       = w *sin(beta);
   float radius  = d +g;
 
-  coords.x = radius *cos(epsilon);
-  coords.y = radius *sin(epsilon);
-  coords.z = phi < PI *0.5 ? c +e -f : c -e -f; // if phi < 90°
-
-
+  newPos.x        = radius *cos(epsilon);
+  newPos.y        = radius *sin(epsilon);
+  newPos.z        = phi < PI *0.5 ? c +e -f : c -e -f; // if phi < 90°
+  
   // X80 Y350 Z150
   // Serial.println("*****************************************");
   // Serial.print  ("X : "   );
-  // Serial.print  (coords.x );
+  // Serial.print  (newPos.x );
   // Serial.print  (", Y : " );
-  // Serial.print  (coords.y );
+  // Serial.print  (newPos.y );
   // Serial.print  (", Z : " );
-  // Serial.println(coords.z );
+  // Serial.println(newPos.z );
 
   // Serial.print  ("W : "  );
   // Serial.print  (w       );
@@ -74,5 +75,5 @@ CartesianPos forwardKinematics(
   // Serial.print  (", Phi : "       );
   // Serial.println( degrees( phi   ));
 
-  return coords;
+  return newPos;
 }

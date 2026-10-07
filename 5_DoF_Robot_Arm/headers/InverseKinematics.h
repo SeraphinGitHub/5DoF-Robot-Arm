@@ -2,6 +2,8 @@
 #ifndef INVERSE_KINEMATICS_H
 #define INVERSE_KINEMATICS_H
 
+  #include "GcodeParser.h"
+
   struct JointAngles {
 
     float epsilon;
@@ -10,10 +12,6 @@
     float lambda;
   };
 
-  JointAngles inverseKinematics(
-    float x,
-    float y,
-    float z
-  );
+  JointAngles inverseKinematics(Position newPos);
 
 #endif

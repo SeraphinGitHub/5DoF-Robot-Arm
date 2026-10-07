@@ -4,46 +4,60 @@
 #include "headers/MotionController.h"
 
 // Read one G-code line at a time from UGS
-CartesianPos parseGcodeLine(String gcodeLine) {
+Position parseGcodeLine(String gcodeLine) {
   
-  CartesianPos coords;
+  Position newPos;
 
-  coords.x = NAN;
-  coords.y = NAN;
-  coords.z = NAN;
-  coords.moveType = NAN;
+  newPos.x        = NAN;
+  newPos.y        = NAN;
+  newPos.z        = NAN;
+  newPos.pitch    = NAN;
+  newPos.roll     = NAN;
+  newPos.moveType = -1;
 
   // Trim any extra spaces or newlines
   gcodeLine.trim();
 
-  if(gcodeLine.length() == 0) return coords;
+  if(gcodeLine.length() == 0) return newPos;
 
   int index_X     = gcodeLine.indexOf("X");
-  coords.x        = extractCoord(gcodeLine, index_X, "float");
+  newPos.x        = extractCoord(gcodeLine, index_X, "float");
   
   int index_Y     = gcodeLine.indexOf("Y");
-  coords.y        = extractCoord(gcodeLine, index_Y, "float");
+  newPos.y        = extractCoord(gcodeLine, index_Y, "float");
 
   int index_Z     = gcodeLine.indexOf("Z");
-  coords.z        = extractCoord(gcodeLine, index_Z, "float");
+  newPos.z        = extractCoord(gcodeLine, index_Z, "float");
+
+  int index_P     = gcodeLine.indexOf("P");
+  newPos.pitch    = extractCoord(gcodeLine, index_P, "float");
+
+  int index_R     = gcodeLine.indexOf("R");
+  newPos.roll     = extractCoord(gcodeLine, index_R, "float");
 
   int index_G     = gcodeLine.indexOf("G");
-  coords.moveType = extractCoord(gcodeLine, index_G, "int");
+  newPos.moveType = extractCoord(gcodeLine, index_G, "int");
 
-  if(isnan(coords.x)) coords.x = currentPos.x;
-  if(isnan(coords.y)) coords.y = currentPos.y;
-  if(isnan(coords.z)) coords.z = currentPos.z;
+  if(isnan(newPos.x    )) newPos.x     = currentPos.x;
+  if(isnan(newPos.y    )) newPos.y     = currentPos.y;
+  if(isnan(newPos.z    )) newPos.z     = currentPos.z;
+  if(isnan(newPos.roll )) newPos.roll  = currentPos.roll;
+  if(isnan(newPos.pitch)) newPos.pitch = currentPos.pitch;
+
+  newPos.x += offsetPos.x;
+  newPos.y += offsetPos.y;
+  newPos.z += offsetPos.z;
 
   // Serial.print   ("MoveType: ");
-  // Serial.print   (coords.moveType);
+  // Serial.print   (newPos.moveType);
   // Serial.print   (", x: ");
-  // Serial.print   (coords.x);
+  // Serial.print   (newPos.x);
   // Serial.print   (", y: ");
-  // Serial.print   (coords.y);
+  // Serial.print   (newPos.y);
   // Serial.print   (", z: ");
-  // Serial.println (coords.z);
+  // Serial.println (newPos.z);
 
-  return coords;
+  return newPos;
 }
 
 

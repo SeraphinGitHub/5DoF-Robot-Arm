@@ -3,7 +3,7 @@
 #define MOTION_CONTROLLER_H
 
   #include <Arduino.h>
-  #include "GcodeParser.h"
+  #include "Calibration.h"
 
   // Robot dimensions in mm
   struct Rig {
@@ -23,37 +23,45 @@
     int mir_wri_ofst;  // Wrist_R    angle offset (mirror servo)
   };
 
-  struct Pot {
-    int pin;           // Pin name
-    int min;           // Pot value at 0°
-    int max;           // Pot value at 180°
-    int minRange;      // Range value between 0° to 270° (Depend on used servo)
-    int maxRange;      // Range value between 0° to 270°
+  struct Position {
+    float x;
+    float y;
+    float z;
+    float pitch;
+    float roll;
+
+    int moveType;
   };
 
-  struct CalibrationTable {
-    float real;
-    float measured;
+  struct Coords {
+    float x;
+    float y;
+    float z;
   };
 
   extern const  Rig rig;
-  extern bool   isMoving;
-  extern float  moveSpeed;
-  extern int    wrist_roll_angle;
+  extern bool   hasInit;
   
-  extern CartesianPos homeCoords;
-  extern CartesianPos currentPos;
+  extern Position homePos;
+  extern Position programPos;
+  extern Position currentPos;
+  extern Coords   offsetPos;
 
-  bool isNewValue           (int &prevAngle, int newAngle);
   int  readAngle            (const Pot& pot);
   int  limitRange           (int angle, const Pot& pot);
-  int  servo_correction_IK  (float IK_angle, CalibrationTable table);
-  int  servo_correction_FK  (int potAngle,   CalibrationTable table);
+  bool isNewValue           (int &prevAngle, int newAngle);
+
+  // ********** Tempory Demo **********
+  void startDemo ();
+  void endDemo   ();
+  void updateDemo();
+  // ********** Tempory Demo **********
   
   void initController       ();
+  void changeVarValue       (char* cmd_Buff);
   void manuAngleMove        (char* cmd_Buff);
-  void setTargetTo          (CartesianPos coords);
-  void moveServosTo         (CartesianPos coords);
-  void linear_Interpolation ();
+  void setTargetTo          (Position newPos);
+  void moveServosTo         (Position newPos);
+  void linearInterpolation  ();
 
 #endif

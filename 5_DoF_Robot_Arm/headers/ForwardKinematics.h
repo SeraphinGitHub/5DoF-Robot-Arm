@@ -4,7 +4,7 @@
 
   #include "GcodeParser.h"
 
-  CartesianPos forwardKinematics(
+  Position forwardKinematics(
     float  deg_epsilon,
     float  deg_tau,
     float  deg_gamma,

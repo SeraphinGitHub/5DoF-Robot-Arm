@@ -4,7 +4,7 @@
 #include "headers/MotionController.h"
 
 
-JointAngles inverseKinematics(float x ,float y ,float z) {
+JointAngles inverseKinematics(Position newPos) {
 
   JointAngles angles;
 
@@ -12,29 +12,60 @@ JointAngles inverseKinematics(float x ,float y ,float z) {
   angles.tau     = NAN;
   angles.gamma   = NAN;
   angles.lambda  = NAN;
+
+  float x        = newPos.x;
+  float y        = newPos.y;
+  float z        = newPos.z;
+  float pitch    = newPos.pitch;
+  float roll     = newPos.roll;
   
   // Robot dimensions in mm
-  float c = rig.c; // Base height
-  float l = rig.l; // Arms lengths (both the same size)
-  float g = rig.g; // Y tool's offset
-  float f = rig.f; // Z tool's offset
+  float c        = rig.c; // Base heights
+  float l        = rig.l; // Arms lengths (both the same size)
+  float g        = rig.g; // Y tool's offset
+  float f        = rig.f; // Z tool's offset
 
-  // Distance base > tool's center
-  float radius  = sqrt(x*x + y*y);
+  // Distance from base to tool tip
+  float radius   = sqrt (x*x + y*y);
+
+  // Wrist & tool tip projections
+  float pitchRad = radians(pitch);
+  float rollRad  = radians(roll );
+
+  float rXY      =       sin(rollRad ) *f   ; // roll  angle f opposite side
+  float rZ       = fabs( cos(rollRad ) *f  ); // roll  angle f adjacent side
+  float gXY      = fabs( cos(pitchRad) *g  ); // pitch angle g adjacent side
+  float gZ       = fabs( sin(pitchRad) *g  ); // pitch angle g opposite side
+  float fXY      = fabs( sin(pitchRad) *rZ ); // pitch angle f opposite side
+  float fZ       = fabs( cos(pitchRad) *rZ ); // pitch angle f adjacent side
   
-  // Wrist position
-  float wZ = z +f;
-  float d  = radius -g;
-  float e  = wZ -c;
+  // Tool tip keep same Z pos when pitch change
+  float wri_Z    = pitch > 0
+    ? z +fZ -gZ
+    : z +fZ +gZ
+  ;
+  
+  // Tool tip keep same XY pos when pitch change
+  float d        = pitch > 0
+    ? radius -fXY -gXY
+    : radius +fXY -gXY
+  ;
+
+  // Tool tip keep same XYZ pos when roll change
+  float tempEpsi = atan2  (y, x);
+  float tool_X   = x + sin(tempEpsi) *rXY;
+  float tool_Y   = y - cos(tempEpsi) *rXY;
+  float epsilon  = atan2  (tool_Y, tool_X);
 
   // Arm geometry
-  float w  = sqrt(d*d + e*e);
-  float a  = w *0.5;
+  float e        = wri_Z -c;
+  float w        = sqrt(d*d + e*e);
+  float a        = w *0.5;
 
   // ===============================================
   // Safe limit
   // ===============================================
-  if(w < f +10 || w > 1.95 *l) return angles;
+  if(w < f +10.0 || w > 1.95 *l) return angles;
   // ===============================================
 
   // Clamp ratios to avoid NAN
@@ -44,15 +75,14 @@ JointAngles inverseKinematics(float x ,float y ,float z) {
   float alpha    = acos  (ratAlpha);
   float beta     = atan2 (e, d);
   float phi      = atan2 (d, e);
-  float epsilon  = atan2 (y, x);
   float gamma    = PI  - (alpha *2); // PI = 180°
   float lambda   = PI  - alpha -phi;
-  float tau      = wZ > c ? alpha +beta : alpha -beta;
+  float tau      = wri_Z > c ? alpha +beta : alpha -beta;
 
   angles.epsilon = degrees( epsilon );
   angles.tau     = degrees( tau     );
   angles.gamma   = degrees( gamma   );
-  angles.lambda  = degrees( lambda  );
+  angles.lambda  = degrees( lambda  ) -pitch;
   
   // X80 Y350 Z150
   // Serial.println("*****************************************");
@@ -87,12 +117,6 @@ JointAngles inverseKinematics(float x ,float y ,float z) {
   // Serial.print  ( degrees( beta  ));
   // Serial.print  (", Phi : "       );
   // Serial.println( degrees( phi   ));
-
-  // *****************************************
-  // Epsilon : 77.12, Gamma : 120.12, Lambda : 82.01, Tau : 51.89
-  // W : 346.62, d : 321.49, e : 129.59
-  // c : 100.00, l : 200.00, g : 37.00, f : 80.00
-  // Alpha : 29.94, Beta : 21.95, Phi : 68.05
 
   return angles;
 }

@@ -51,14 +51,14 @@ public class DialKnob : MonoBehaviour,
 
     public void SendToArduino(int value) {
 
-        string coord = (axisName + value.ToString());
+        // string coord = (axisName + value.ToString());
 
-        if(axisName == "X") mainHandler.prev_X = value;
-        if(axisName == "Y") mainHandler.prev_Y = value;
+        // if(axisName == "X") mainHandler.prev_X = value;
+        // if(axisName == "Y") mainHandler.prev_Y = value;
 
-        mainHandler.serial.WriteLine(coord);
-        mainHandler.UpdatePosText();
-        mainHandler.ArduinoResponse(" > " +coord);
+        // mainHandler.serial.WriteLine(coord);
+        // mainHandler.UpdatePosText();
+        // mainHandler.ArduinoResponse(" > " +coord);
     }
 
 
@@ -79,3 +79,5 @@ public class DialKnob : MonoBehaviour,
     }
 
 }
+
+

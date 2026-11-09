@@ -13,7 +13,7 @@ public class MainHandler : MonoBehaviour {
     
     // Public
     public GameObject     msg_Running;
-    public GameObject     msg_CurPos;
+    public TMP_Text       msg_CurPos;
 
     public TMP_InputField X_ValueField;
     public TMP_InputField Y_ValueField;
@@ -21,19 +21,21 @@ public class MainHandler : MonoBehaviour {
     public TMP_InputField ProgWindowField;
 
     // Private
-    private string homeCoord;
-    private float  nextSendTime = 0f;
-    private float  moveStep     = 10f;
+    private string curPos_str   = "";
+    private string serialBuffer = "";
 
-    [HideInInspector] public float  prev_X;
-    [HideInInspector] public float  prev_Y;
-    [HideInInspector] public float  prev_Z;
+    private Queue<string> serialMessages = new Queue<string>();
     
 
     void Start() {
 
         OpenSerial();
-        msg_Running.SetActive(true);
+        msg_Running.SetActive(true );
+    }
+
+    void Update() {
+
+        updateCurPosDisplay();
     }
     
 
@@ -58,33 +60,39 @@ public class MainHandler : MonoBehaviour {
     }
 
     // Coroutines
-    IEnumerator RunProgram(List<string> GCodeLines) {
+    IEnumerator RunProgram(List<string> ProgList) {
 
-        while(GCodeLines.Count > 0) {
-
-            string curLine = GCodeLines[0];
-            serial.WriteLine(curLine);
+        while(ProgList.Count > 0) {
+            
+            // Send command
+            string curLine = ProgList[0];
+            serialMessages.Clear();
+            serial.WriteLine("coord>" +curLine);
 
             bool arrived = false;
 
             while(!arrived) {
 
-                if(serial.BytesToRead > 0) {
-                    string response = serial.ReadLine().Trim();
+                if(serialMessages.Count > 0) {
+
+                    string response = serialMessages.Dequeue();
+
+                    // Debug.Log("DEQUEUED: [" + response + "]");
+                    // Debug.Log("QUEUE REMAINING: " + serialMessages.Count);
 
                     if(response == "RES:ARRIVED") {
                         arrived = true;
-                        Debug.Log("ATPOS: " + curLine);
+                        Debug.Log("ARRIVED: " +curLine);
                     }
                 }
 
                 yield return null;
             }
 
-            GCodeLines.RemoveAt(0);
+            ProgList.RemoveAt(0);
         }
 
-        Debug.Log("STATUS: PROGRAM DONE !");
+        Debug.Log("PROGRAM DONE!");
     }
     
 
@@ -109,11 +117,30 @@ public class MainHandler : MonoBehaviour {
         }
     }
 
-    private void SendNextCmd(string cmd) {
+    private void updateCurPosDisplay() {
 
-        if(Time.time >= nextSendTime) {
-            serial.WriteLine(cmd);
-            nextSendTime = Time.time +0.1f;
+        if(serial == null || !serial.IsOpen) return;
+
+        serialBuffer += serial.ReadExisting();
+
+        while(serialBuffer.Contains("\n")) {
+
+            int    index    = serialBuffer.IndexOf("\n");
+            string response = serialBuffer.Substring(0, index).Trim();
+            serialBuffer    = serialBuffer.Substring(index +1);
+
+            if(string.IsNullOrEmpty(response)) continue;
+
+            Debug.Log("SERIAL RECEIVED: [" + response + "]");
+
+            if(response.StartsWith("POS:")) {
+                msg_CurPos.text = curPos_str = response.Substring(4);
+            }
+
+            else {
+                serialMessages.Enqueue(response);
+                Debug.Log("QUEUE SIZE: " + serialMessages.Count);
+            }
         }
     }
 
@@ -147,7 +174,6 @@ public class MainHandler : MonoBehaviour {
             try {
                 string response = serial.ReadLine().Trim();
                 Debug.Log(response);
-                if(response == "RES:INITILIZED") serial.WriteLine("home");
             }
 
             catch(System.TimeoutException) {
@@ -176,116 +202,87 @@ public class MainHandler : MonoBehaviour {
 
     public void Home() {
         
-        if(isSerial()) serial.WriteLine("home");
-    }
-
-    public void SendCoord() {
-        
-        string coord = (
-            "X" + X_ValueField.text + " " +
-            "Y" + Y_ValueField.text + " " +
-            "Z" + Z_ValueField.text
-        );
-
-        prev_X = StringToFloat(X_ValueField.text);
-        prev_Y = StringToFloat(Y_ValueField.text);
-        prev_Z = StringToFloat(Z_ValueField.text);
-
-        serial.WriteLine(coord);
-        Debug.Log(coord);
+        if(isSerial()) {
+            serial.WriteLine("home");
+        }
     }
 
     public void SendProg() {
 
-        string programText      = ProgWindowField.text;
-        List<string> GCodeLines =  new List<string>( programText.Replace("\r", "").Split('\n') );
+        string programText    = ProgWindowField.text;
+        List<string> ProgList = new List<string>( programText.Replace("\r", "").Split('\n') );
         
-        GCodeLines.RemoveAll(codeLine => string.IsNullOrWhiteSpace(codeLine));
+        ProgList.RemoveAll(codeLine => string.IsNullOrWhiteSpace(codeLine));
         
-        StartCoroutine( RunProgram(GCodeLines) );
+        StartCoroutine( RunProgram(ProgList) );
     }
 
 
-    // Axis move
+    // Navigate Axis
     public void X_Plus() {
-
-        // if(isSerial()) serial.WriteLine("nav_X:10");
         
-        prev_X += moveStep;
-        string coord = ("X" + prev_X.ToString());
-
-        serial.WriteLine(coord);
-        // ArduinoResponse(" > " +coord);
+        if(!isSerial()) return;
+        serial.WriteLine("nav>X+");
     }
 
     public void X_Minus() {
         
-        // if(isSerial()) serial.WriteLine("nav_X:-10");
-
-        prev_X -= moveStep;
-        string coord = ("X" + prev_X.ToString());
-
-        serial.WriteLine(coord);
-        // ArduinoResponse(" > " +coord);
+        if(!isSerial()) return;
+        serial.WriteLine("nav>X-");
     }
 
     public void Y_Plus() {
         
-        // if(isSerial()) serial.WriteLine("nav_Y:10");
-
-        prev_Y += moveStep;
-        string coord = ("Y" + prev_Y.ToString());
-
-        serial.WriteLine(coord);
-        // ArduinoResponse(" > " +coord);
+        if(!isSerial()) return;
+        serial.WriteLine("nav>Y+");
     }
 
     public void Y_Minus() {
         
-        // if(isSerial()) serial.WriteLine("nav_Y:-10");
-
-        prev_Y -= moveStep;
-        string coord = ("Y" + prev_Y.ToString());
-
-        serial.WriteLine(coord);
-        // ArduinoResponse(" > " +coord);
+        if(!isSerial()) return;
+        serial.WriteLine("nav>Y-");
     }
 
     public void Z_Plus() {
-        
-        prev_Z += moveStep;
-        string coord = ("Z" + prev_Z.ToString());
 
-        serial.WriteLine(coord);
-        ArduinoResponse(" > " +coord);
+        if(!isSerial()) return;
+        serial.WriteLine("nav>Z+");
     }
 
     public void Z_Minus() {
-        
-        prev_Z -= moveStep;
-        string coord = ("Z" + prev_Z.ToString());
 
-        serial.WriteLine(coord);
-        ArduinoResponse(" > " +coord);
+        if(!isSerial()) return;
+        serial.WriteLine("nav>Z-");
+    }
+
+    public void P_Plus() {
+        
+        if(!isSerial()) return;
+        serial.WriteLine("nav>P+");
+    }
+
+    public void P_Minus() {
+        
+        if(!isSerial()) return;
+        serial.WriteLine("nav>P-");
+    }
+
+    public void R_Plus() {
+
+        if(!isSerial()) return;
+        serial.WriteLine("nav>R+");
+    }
+
+    public void R_Minus() {
+
+        if(!isSerial()) return;
+        serial.WriteLine("nav>R-");
     }
     
+
+    // Record position
     public void RecordPos() {
 
-        string coord = (
-           " X: " + prev_X.ToString() +
-           " Y: " + prev_Y.ToString() +
-           " Z: " + prev_Z.ToString()
-        );
-
-        ProgWindowField.text += coord;
-    }
-
-    public void UpdatePosText() {
-
-        msg_CurPos.GetComponent<TMP_Text>().text = 
-           " X: " + prev_X.ToString() +
-           " Y: " + prev_Y.ToString() +
-           " Z: " + prev_Z.ToString()
-        ;
+        ProgWindowField.text += curPos_str + "\n";
     }
 }

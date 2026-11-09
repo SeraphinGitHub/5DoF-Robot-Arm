@@ -58,8 +58,11 @@
   // ********** Tempory Demo **********
   
   void initController       ();
+  void sendPos_OnChange     ();
+  void navigate             (char* cmd_Buff);
   void changeVarValue       (char* cmd_Buff);
   void manuAngleMove        (char* cmd_Buff);
+  void processTargetPos     (char* cmd_Buff);
   void setTargetTo          (Position newPos);
   void moveServosTo         (Position newPos);
   void linearInterpolation  ();

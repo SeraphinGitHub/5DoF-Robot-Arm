@@ -43,11 +43,13 @@ Position parseGcodeLine(String gcodeLine) {
   if(isnan(newPos.z    )) newPos.z     = currentPos.z;
   if(isnan(newPos.roll )) newPos.roll  = currentPos.roll;
   if(isnan(newPos.pitch)) newPos.pitch = currentPos.pitch;
-
-  newPos.x += offsetPos.x;
-  newPos.y += offsetPos.y;
-  newPos.z += offsetPos.z;
-
+  
+  // =================================================
+  // newPos.x += offsetPos.x;
+  // newPos.y += offsetPos.y;
+  // newPos.z += offsetPos.z;
+  // =================================================
+  
   // Serial.print   ("MoveType: ");
   // Serial.print   (newPos.moveType);
   // Serial.print   (", x: ");

@@ -40,16 +40,20 @@ const Rig rig = {
 // Vars
 // ====================================================
 // Position  pos    = {   X,   Y,   Z,   P,   R, MT };
-Position homePos    = {   0, 100, 250,   0,   0,  1 };
+Position homePos    = {   0, 100, 280,   0,   0,  1 };
+Position prevPos    = { NAN, NAN, NAN, NAN, NAN, -1 };
 Position currentPos = { NAN, NAN, NAN, NAN, NAN, -1 };
 Position targetPos  = { NAN, NAN, NAN, NAN, NAN, -1 };
 Coords   offsetPos  = {   0,   0,   0  };
 
-unsigned long lastStepTime = 0;
+unsigned long lastStepTime    = 0;
+unsigned long lastDisplayTime = 0;
 
-float stepInterval   =   2.0; // ms   (ms between steps > smaller more precise)
+float navLineStep    =  10.0; // mm
+float navAngleStep   =   5.0; // degrees
+float stepInterval   =   4.0; // ms   (ms between steps > smaller more precise)
 float currentSpeed   =   0.0; // mm/s
-float maxSpeed       = 100.0; // mm/s (smaller more precise)
+float maxSpeed       =  95.0; // mm/s (smaller more precise)
 float accelDist      =  10.0; // mm
 float decelDist      =  10.0; // mm
 
@@ -68,34 +72,28 @@ int prev_Wrist       = -1;
 int prev_WristRoll   = -1;
 
 
-
 // ****************************  Tempory Demo  ****************************
 // String demoProg[] = {
-//   "X100 Y60 Z215 A45 B45",
-//   "X-100 Y150 Z150 A-45 B-30",
-//   "X-150 Y60 Z300 A30 B0",
-//   "X100 Y120 Z380 A-60 B20",
-//   "X50 Y80 Z100 A-20",
-//   "X-100 Y120 Z350 A-45 B-60"
-// };
-
-// String demoProg[] = {
-//   "X100 Y60 Z215 P45 R45",
-//   "X-40 Y57 Z215 P-20 R-15",
-//   "X-110 Y70 Z225 P-40 R30",
-//   "X-80 Y195 Z245 P0 R45",
-//   "X100 P20",
-//   "X100 Y60 Z215 P45 R45"
+//   "Z300",
+//   "X-50 Y50",
+//   "P-45 R-45",
+//   "Z250",
+//   "Y100 R-35",
+//   "Y150 R-25",
+//   "X0 R0",
+//   "X50 R25",
+//   "Y100 R35",
+//   "Y50 R45",
+//   "X0 P45 R0",
+//   "X-50 P-45 R-45",
+//   "Z300"
 // };
 
 String demoProg[] = {
-  "X100 Y200 Z250",
-  "Z200",
-  "X0",
-  "Y100",
-  "X100",
-  "Y200",
-  "Z250"
+  "P45 R-45",
+  "P-45",
+  "R45",
+  "P45",
 };
 
 int  demoSize    = sizeof(demoProg) / sizeof(demoProg[0]);
@@ -150,6 +148,66 @@ int  limitRange(int angle, const Pot& pot) {
 // ====================================================
 // Methods
 // ====================================================
+void sendPos_OnChange() {
+
+  unsigned long now = millis();
+
+  if(now -lastDisplayTime < 100.0) return;
+
+  lastDisplayTime = now;
+
+  if(  currentPos.x     != prevPos.x
+    || currentPos.y     != prevPos.y
+    || currentPos.z     != prevPos.z
+    || currentPos.pitch != prevPos.pitch
+    || currentPos.roll  != prevPos.roll
+  ) {
+
+    Serial.print   (F("POS:X"));
+    Serial.print   (currentPos.x, 0);
+    Serial.print   (" Y");
+    Serial.print   (currentPos.y, 0);
+    Serial.print   (" Z");
+    Serial.print   (currentPos.z, 0);
+    Serial.print   (" P");
+    Serial.print   (currentPos.pitch, 0);
+    Serial.print   (" R");
+    Serial.println (currentPos.roll, 0);
+
+    prevPos = currentPos;
+  }
+}
+
+void navigate(char* cmd_Buff) {
+  
+  Position newPos = currentPos;
+
+  if(strcmp(cmd_Buff, "X+") == 0) newPos.x += navLineStep;
+  if(strcmp(cmd_Buff, "X-") == 0) newPos.x -= navLineStep;
+  if(strcmp(cmd_Buff, "Y+") == 0) newPos.y += navLineStep;
+  if(strcmp(cmd_Buff, "Y-") == 0) newPos.y -= navLineStep;
+  if(strcmp(cmd_Buff, "Z+") == 0) newPos.z += navLineStep;
+  if(strcmp(cmd_Buff, "Z-") == 0 && newPos.z > 0) newPos.z -= navLineStep;
+
+  if(strcmp(cmd_Buff, "P+") == 0 && newPos.pitch <  85.0) newPos.pitch += navAngleStep;
+  if(strcmp(cmd_Buff, "P-") == 0 && newPos.pitch > -85.0) newPos.pitch -= navAngleStep;
+  if(strcmp(cmd_Buff, "R+") == 0 && newPos.roll  <  85.0) newPos.roll  += navAngleStep;
+  if(strcmp(cmd_Buff, "R-") == 0 && newPos.roll  > -85.0) newPos.roll  -= navAngleStep;
+
+  setTargetTo(newPos);
+  
+  // Serial.print  (F("X"));
+  // Serial.print  (newPos.x);
+  // Serial.print  (F(" Y"));
+  // Serial.print  (newPos.y);
+  // Serial.print  (F(" Z"));
+  // Serial.print  (newPos.z);
+  // Serial.print  (F(" P"));
+  // Serial.print  (newPos.pitch);
+  // Serial.print  (F(" R"));
+  // Serial.println(newPos.roll);
+}
+
 void changeVarValue(char* cmd_Buff) {
   
   // CMD examples :
@@ -164,6 +222,8 @@ void changeVarValue(char* cmd_Buff) {
 
   bool isNewSpeed = false;
 
+  Serial.print("changeVarValue : ");
+  Serial.println(varName);
 
   // ============================================
   // Step Interval (ms)
@@ -285,11 +345,9 @@ void manuAngleMove(char* cmd_Buff) {
   // elbow:87
   
   char* colon = strchr(cmd_Buff, ':');
-  
   if(colon == nullptr) return;
 
   *colon = '\0'; // Split the string into two parts
-
   char* axisName = cmd_Buff;
   int   angle    = atoi(colon + 1);
 
@@ -370,6 +428,15 @@ void manuAngleMove(char* cmd_Buff) {
   }
 }
 
+void processTargetPos(char* cmd_Buff) {
+
+  Position newPos = parseGcodeLine(cmd_Buff);
+  setTargetTo(newPos);
+
+  // Serial.print(F("RES:GO TO "));
+  // Serial.println(cmd_Buff);
+}
+
 void setTargetTo(Position newPos) {
 
   targetPos    = newPos;
@@ -385,18 +452,18 @@ void arrivedAtPos() {
 
   Serial.println(F("RES:ARRIVED"));
 
-  Serial.print  (F("Arrived at:  X "));
-  Serial.print  ( targetPos.x    );
-  Serial.print  (F("  Y "));
-  Serial.print  ( targetPos.y    );
-  Serial.print  (F("  Z "));
-  Serial.print  ( targetPos.z    );
-  Serial.print  (F("  P "));
-  Serial.print  ( targetPos.pitch);
-  Serial.print  (F("  R "));
-  Serial.print  ( targetPos.roll );
-  Serial.print  (F("  MT "));
-  Serial.println( targetPos.moveType );
+  // Serial.print  (F("Arrived at:  X "));
+  // Serial.print  ( currentPos.x    );
+  // Serial.print  (F("  Y "));
+  // Serial.print  ( currentPos.y    );
+  // Serial.print  (F("  Z "));
+  // Serial.print  ( currentPos.z    );
+  // Serial.print  (F("  P "));
+  // Serial.print  ( currentPos.pitch);
+  // Serial.print  (F("  R "));
+  // Serial.println( currentPos.roll );
+  // Serial.print  (F("  MT "));
+  // Serial.println( currentPos.moveType );
 }
 
 
@@ -460,6 +527,8 @@ void initController() {
 
   setTargetTo(homePos);
   
+  Serial.println(F("RES:INITILIZED"));
+
   // Serial.print  (F("RES:CONNECTED > at:  X "));
   // Serial.print  ( floor(currentPos.x) );
   // Serial.print  (F("  Y "));
@@ -483,10 +552,10 @@ void moveServosTo(Position newPos) {
   JointAngles angles = inverseKinematics(newPos);
 
   // Safe limit
-  if(  isnan(angles.tau    )
-    || isnan(angles.gamma  )
-    || isnan(angles.lambda )
-    || isnan(angles.epsilon)) {
+  if(isnan(angles.tau    )
+  || isnan(angles.gamma  )
+  || isnan(angles.lambda )
+  || isnan(angles.epsilon)) {
     return;
   }
 
@@ -580,7 +649,7 @@ void linearInterpolation() {
   // ==============================================
   // Arrived at targetPos
   // ==============================================
-  if(totalDist_3D <= 1.0) { arrivedAtPos(); return; }
+  if(totalDist_3D <= 2.0) { arrivedAtPos(); return; }
 
 
   // ==============================================

@@ -34,21 +34,23 @@ void loop() {
     if(strcmp(cmd_Buff, "demo") == 0            ) { startDemo     ();        return; }
     if(strcmp(cmd_Buff, "end" ) == 0            ) { endDemo       ();        return; }
 
-    // **********************
-    changeVarValue(cmd_Buff);
+    char* delimiter = strchr(cmd_Buff, '>');
+    if(delimiter == nullptr) return;
+
+    *delimiter    = '\0';
+    char* varName = cmd_Buff;
+    char* value   = delimiter +1;
+
+    if(strcmp(cmd_Buff, "set"  ) == 0) { changeVarValue  (value); return; }
+    if(strcmp(cmd_Buff, "nav"  ) == 0) { navigate        (value); return; }
+    if(strcmp(cmd_Buff, "coord") == 0) { processTargetPos(value); return; }
     // manuAngleMove (cmd_Buff);
-    // **********************
-
-    Position newPos = parseGcodeLine(cmd_Buff);
-    setTargetTo(newPos);
-
-    Serial.print(F("RES:GO TO "));
-    Serial.println(cmd_Buff);
 
   }
 
   linearInterpolation();
   updateDemo();
+  sendPos_OnChange();
 
 }
 

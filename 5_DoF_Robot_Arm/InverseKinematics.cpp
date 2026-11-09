@@ -18,6 +18,16 @@ JointAngles inverseKinematics(Position newPos) {
   float z        = newPos.z;
   float pitch    = newPos.pitch;
   float roll     = newPos.roll;
+
+  // ===============================================
+  // Safe limit
+  // ===============================================
+  if(z     < 0    ) z     = 0;
+  if(pitch < -85.0) pitch = -85.0;
+  if(pitch >  85.0) pitch =  85.0;
+  if(roll  < -85.0) roll  = -85.0;
+  if(roll  >  85.0) roll  =  85.0;
+  // ===============================================
   
   // Robot dimensions in mm
   float c        = rig.c; // Base heights
@@ -65,14 +75,14 @@ JointAngles inverseKinematics(Position newPos) {
   // ===============================================
   // Safe limit
   // ===============================================
-  if(w < f +10.0 || w > 1.95 *l) return angles;
+  if(w < l *0.5 || w > l *1.95) return angles;
   // ===============================================
 
   // Clamp ratios to avoid NAN
-  float ratAlpha = constrain( a /l , -1.0, 1.0);
+  float ratioAlpha = constrain( a /l , -1.0, 1.0);
 
   // Calculate angles in Radians
-  float alpha    = acos  (ratAlpha);
+  float alpha    = acos  (ratioAlpha);
   float beta     = atan2 (e, d);
   float phi      = atan2 (d, e);
   float gamma    = PI  - (alpha *2); // PI = 180°

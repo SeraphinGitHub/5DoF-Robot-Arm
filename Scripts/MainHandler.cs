@@ -21,11 +21,13 @@ public class MainHandler : MonoBehaviour {
     public TMP_InputField ProgWindowField;
 
     // Private
+    private float  navInterval  = 0.1f;
     private string curPos_str   = "";
     private string serialBuffer = "";
 
     private Queue<string> serialMessages = new Queue<string>();
-    
+    private Coroutine     navCoroutine;
+
 
     void Start() {
 
@@ -95,6 +97,17 @@ public class MainHandler : MonoBehaviour {
         Debug.Log("PROGRAM DONE!");
     }
     
+    IEnumerator NavRoutine(string navAxis) {
+       
+        while(true) {
+            if(!isSerial()) yield break;
+
+            serial.WriteLine(navAxis);
+
+            yield return new WaitForSeconds(navInterval);
+        }
+    }
+
 
     // Private
     private void OnDisable() {
@@ -119,7 +132,7 @@ public class MainHandler : MonoBehaviour {
 
     private void updateCurPosDisplay() {
 
-        if(serial == null || !serial.IsOpen) return;
+        if(!isSerial()) return;
 
         serialBuffer += serial.ReadExisting();
 
@@ -131,7 +144,7 @@ public class MainHandler : MonoBehaviour {
 
             if(string.IsNullOrEmpty(response)) continue;
 
-            Debug.Log("SERIAL RECEIVED: [" + response + "]");
+            // Debug.Log("SERIAL RECEIVED: [" + response + "]");
 
             if(response.StartsWith("POS:")) {
                 msg_CurPos.text = curPos_str = response.Substring(4);
@@ -139,7 +152,7 @@ public class MainHandler : MonoBehaviour {
 
             else {
                 serialMessages.Enqueue(response);
-                Debug.Log("QUEUE SIZE: " + serialMessages.Count);
+                // Debug.Log("QUEUE SIZE: " + serialMessages.Count);
             }
         }
     }
@@ -184,7 +197,7 @@ public class MainHandler : MonoBehaviour {
 
     public void ArduinoResponse(string msg) {
 
-        if(serial == null || !serial.IsOpen) return;
+        if(!isSerial()) return;
 
         try {
             string response = serial.ReadLine();
@@ -219,70 +232,78 @@ public class MainHandler : MonoBehaviour {
 
 
     // Navigate Axis
+    public void StopNavRoutine() {
+
+        if(navCoroutine != null) {
+            StopCoroutine(navCoroutine);
+            navCoroutine = null;
+        }
+    }
+
     public void X_Plus() {
-        
-        if(!isSerial()) return;
-        serial.WriteLine("nav>X+");
+
+        if(navCoroutine != null) StopCoroutine(navCoroutine);
+        navCoroutine = StartCoroutine(NavRoutine("nav>X+"));
     }
 
     public void X_Minus() {
-        
-        if(!isSerial()) return;
-        serial.WriteLine("nav>X-");
+
+        if(navCoroutine != null) StopCoroutine(navCoroutine);
+        navCoroutine = StartCoroutine(NavRoutine("nav>X-"));
     }
 
     public void Y_Plus() {
         
-        if(!isSerial()) return;
-        serial.WriteLine("nav>Y+");
+        if(navCoroutine != null) StopCoroutine(navCoroutine);
+        navCoroutine = StartCoroutine(NavRoutine("nav>Y+"));
     }
 
     public void Y_Minus() {
         
-        if(!isSerial()) return;
-        serial.WriteLine("nav>Y-");
+        if(navCoroutine != null) StopCoroutine(navCoroutine);
+        navCoroutine = StartCoroutine(NavRoutine("nav>Y-"));
     }
 
     public void Z_Plus() {
 
-        if(!isSerial()) return;
-        serial.WriteLine("nav>Z+");
+        if(navCoroutine != null) StopCoroutine(navCoroutine);
+        navCoroutine = StartCoroutine(NavRoutine("nav>Z+"));
     }
 
     public void Z_Minus() {
 
-        if(!isSerial()) return;
-        serial.WriteLine("nav>Z-");
+        if(navCoroutine != null) StopCoroutine(navCoroutine);
+        navCoroutine = StartCoroutine(NavRoutine("nav>Z-"));
     }
 
     public void P_Plus() {
         
-        if(!isSerial()) return;
-        serial.WriteLine("nav>P+");
+        if(navCoroutine != null) StopCoroutine(navCoroutine);
+        navCoroutine = StartCoroutine(NavRoutine("nav>P+"));
     }
 
     public void P_Minus() {
         
-        if(!isSerial()) return;
-        serial.WriteLine("nav>P-");
+        if(navCoroutine != null) StopCoroutine(navCoroutine);
+        navCoroutine = StartCoroutine(NavRoutine("nav>P-"));
     }
 
     public void R_Plus() {
 
-        if(!isSerial()) return;
-        serial.WriteLine("nav>R+");
+        if(navCoroutine != null) StopCoroutine(navCoroutine);
+        navCoroutine = StartCoroutine(NavRoutine("nav>R+"));
     }
 
     public void R_Minus() {
 
-        if(!isSerial()) return;
-        serial.WriteLine("nav>R-");
+        if(navCoroutine != null) StopCoroutine(navCoroutine);
+        navCoroutine = StartCoroutine(NavRoutine("nav>R-"));
     }
     
 
     // Record position
     public void RecordPos() {
-
         ProgWindowField.text += curPos_str + "\n";
     }
+
 }

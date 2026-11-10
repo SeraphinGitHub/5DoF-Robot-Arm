@@ -29,10 +29,10 @@ void loop() {
     // Serial.println("]");
 
     // Initialize servos at physical current pos
-    if(strcmp(cmd_Buff, "init") == 0 && !hasInit) { initController();        return; }
-    if(strcmp(cmd_Buff, "home") == 0            ) { setTargetTo   (homePos); return; }
-    if(strcmp(cmd_Buff, "demo") == 0            ) { startDemo     ();        return; }
-    if(strcmp(cmd_Buff, "end" ) == 0            ) { endDemo       ();        return; }
+    if(isMatch(cmd_Buff, "init") && !hasInit) { initController();        return; }
+    if(isMatch(cmd_Buff, "home")            ) { setTargetTo   (homePos); return; }
+    if(isMatch(cmd_Buff, "demo")            ) { startDemo     ();        return; }
+    if(isMatch(cmd_Buff, "end" )            ) { endDemo       ();        return; }
 
     char* delimiter = strchr(cmd_Buff, '>');
     if(delimiter == nullptr) return;
@@ -41,9 +41,9 @@ void loop() {
     char* varName = cmd_Buff;
     char* value   = delimiter +1;
 
-    if(strcmp(cmd_Buff, "set"  ) == 0) { changeVarValue  (value); return; }
-    if(strcmp(cmd_Buff, "nav"  ) == 0) { navigate        (value); return; }
-    if(strcmp(cmd_Buff, "coord") == 0) { processTargetPos(value); return; }
+    if(isMatch(cmd_Buff, "set"  )) { changeVarValue  (value); return; }
+    if(isMatch(cmd_Buff, "nav"  )) { navigate        (value); return; }
+    if(isMatch(cmd_Buff, "coord")) { processTargetPos(value); return; }
     // manuAngleMove (cmd_Buff);
 
   }

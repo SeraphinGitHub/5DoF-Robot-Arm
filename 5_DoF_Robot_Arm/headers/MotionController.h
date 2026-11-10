@@ -39,8 +39,20 @@
     float z;
   };
 
+  struct SafeLimit {
+    bool isMin_Z;
+    bool isMin_W;
+    bool isMax_W;
+    bool isMin_Pitch;
+    bool isMax_Pitch;
+    bool isMin_Roll;
+    bool isMax_Roll;
+  };
+
   extern const  Rig rig;
   extern bool   hasInit;
+
+  extern SafeLimit workSpace;
   
   extern Position homePos;
   extern Position programPos;
@@ -50,6 +62,8 @@
   int  readAngle            (const Pot& pot);
   int  limitRange           (int angle, const Pot& pot);
   bool isNewValue           (int &prevAngle, int newAngle);
+  bool reachedTarget        ();
+  bool isMatch              (char* checkVar, char* valueVar);
 
   // ********** Tempory Demo **********
   void startDemo ();
@@ -58,11 +72,13 @@
   // ********** Tempory Demo **********
   
   void initController       ();
+  void sendInitData         ();
   void sendPos_OnChange     ();
   void navigate             (char* cmd_Buff);
   void changeVarValue       (char* cmd_Buff);
   void manuAngleMove        (char* cmd_Buff);
   void processTargetPos     (char* cmd_Buff);
+  void arrivedAtPos         ();
   void setTargetTo          (Position newPos);
   void moveServosTo         (Position newPos);
   void linearInterpolation  ();

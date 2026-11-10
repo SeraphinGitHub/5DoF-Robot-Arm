@@ -46,11 +46,17 @@ Position currentPos = { NAN, NAN, NAN, NAN, NAN, -1 };
 Position targetPos  = { NAN, NAN, NAN, NAN, NAN, -1 };
 Coords   offsetPos  = {   0,   0,   0  };
 
+SafeLimit workSpace = {
+  false,
+  false, false,
+  false, false,
+  false, false
+};
+
 unsigned long lastStepTime    = 0;
 unsigned long lastDisplayTime = 0;
 
-float navLineStep    =  10.0; // mm
-float navAngleStep   =   5.0; // degrees
+float reachRange     =   2.0; // mm   (tolerance in mm between targetPos & curPos)
 float stepInterval   =   4.0; // ms   (ms between steps > smaller more precise)
 float currentSpeed   =   0.0; // mm/s
 float maxSpeed       =  95.0; // mm/s (smaller more precise)
@@ -64,12 +70,15 @@ bool hasInit         = false;
 bool isHome          = false;
 bool isMoving        = false;
 bool isPrevInit      = false;
+bool isNavigating    = false;
 
 int prev_Base        = -1;
 int prev_Shoulder    = -1;
 int prev_Elbow       = -1;
 int prev_Wrist       = -1;
 int prev_WristRoll   = -1;
+
+String prevNavAxis   = "Z";
 
 
 // ****************************  Tempory Demo  ****************************
@@ -144,10 +153,37 @@ int  limitRange(int angle, const Pot& pot) {
   return constrain(angle, pot.minRange, pot.maxRange);
 }
 
+bool reachedTarget() {
+
+  if(  fabs(currentPos.x     -targetPos.x    ) < reachRange
+    && fabs(currentPos.y     -targetPos.y    ) < reachRange
+    && fabs(currentPos.z     -targetPos.z    ) < reachRange
+    && fabs(currentPos.pitch -targetPos.pitch) < reachRange
+    && fabs(currentPos.roll  -targetPos.roll ) < reachRange
+  ) {
+    return true;
+  }
+
+  else return false;
+}
+
+bool isMatch(char* checkVar, char* valueVar) {
+
+  if(strcmp(checkVar, valueVar) == 0) return true;
+  else return false;
+}
+
 
 // ====================================================
 // Methods
 // ====================================================
+void sendInitData() {
+  
+  Serial.print(F("maxSpeed:"));
+  Serial.println(maxSpeed);
+
+}
+
 void sendPos_OnChange() {
 
   unsigned long now = millis();
@@ -179,20 +215,48 @@ void sendPos_OnChange() {
 }
 
 void navigate(char* cmd_Buff) {
+
+  char* colon = strchr(cmd_Buff, ':');
+  if(colon == nullptr) return;
+
+  *colon = '\0'; // Split the string into two parts
+  char* varName = cmd_Buff;
+  float value   = atof(colon + 1);
+  
+  
+  if(isNavigating) isNavigating = false;
+  
+  if(!reachedTarget()) return;
+
+  isNavigating = true;
   
   Position newPos = currentPos;
 
-  if(strcmp(cmd_Buff, "X+") == 0) newPos.x += navLineStep;
-  if(strcmp(cmd_Buff, "X-") == 0) newPos.x -= navLineStep;
-  if(strcmp(cmd_Buff, "Y+") == 0) newPos.y += navLineStep;
-  if(strcmp(cmd_Buff, "Y-") == 0) newPos.y -= navLineStep;
-  if(strcmp(cmd_Buff, "Z+") == 0) newPos.z += navLineStep;
-  if(strcmp(cmd_Buff, "Z-") == 0 && newPos.z > 0) newPos.z -= navLineStep;
+  bool isNav_X   = isMatch(varName, "X+") || isMatch(varName, "X-");
+  bool isNav_Y   = isMatch(varName, "Y+") || isMatch(varName, "Y-");
+  bool isNav_Z   = isMatch(varName, "Z+") || isMatch(varName, "Z-");
+  bool isNav_P   = isMatch(varName, "P+") || isMatch(varName, "P-");
+  bool isNav_R   = isMatch(varName, "R+") || isMatch(varName, "R-");
 
-  if(strcmp(cmd_Buff, "P+") == 0 && newPos.pitch <  85.0) newPos.pitch += navAngleStep;
-  if(strcmp(cmd_Buff, "P-") == 0 && newPos.pitch > -85.0) newPos.pitch -= navAngleStep;
-  if(strcmp(cmd_Buff, "R+") == 0 && newPos.roll  <  85.0) newPos.roll  += navAngleStep;
-  if(strcmp(cmd_Buff, "R-") == 0 && newPos.roll  > -85.0) newPos.roll  -= navAngleStep;
+  bool isMovable = !workSpace.isMax_W || prevNavAxis != varName;
+
+  if(isMovable) {
+    if(isNav_X) isMatch(varName, "X+") ? newPos.x += value : newPos.x -= value;
+    if(isNav_Y) isMatch(varName, "Y+") ? newPos.y += value : newPos.y -= value;
+    if(isNav_Z) isMatch(varName, "Z+") ? newPos.z += value : newPos.z -= value;
+  }
+
+  if(isNav_P) {
+    if     (isMatch(varName, "P+") && !workSpace.isMax_Pitch) newPos.pitch += value;
+    else if(isMatch(varName, "P-") && !workSpace.isMin_Pitch) newPos.pitch -= value;
+  }
+
+  if(isNav_R) {
+    if     (isMatch(varName, "R+") && !workSpace.isMax_Roll) newPos.roll += value;
+    else if(isMatch(varName, "R-") && !workSpace.isMin_Roll) newPos.roll -= value;
+  }
+
+  prevNavAxis = varName;
 
   setTargetTo(newPos);
   
@@ -222,13 +286,13 @@ void changeVarValue(char* cmd_Buff) {
 
   bool isNewSpeed = false;
 
-  Serial.print("changeVarValue : ");
-  Serial.println(varName);
+  // Serial.print("changeVarValue:");
+  // Serial.println(varName);
 
   // ============================================
   // Step Interval (ms)
   // ============================================
-  if(strcmp(varName, "stepInterval") == 0) {
+  if(isMatch(varName, "stepInterval")) {
 
     if(value >= 1.0 && value <= 20.0) {
       stepInterval = value;
@@ -242,12 +306,12 @@ void changeVarValue(char* cmd_Buff) {
   // ============================================
   // Max Speed (mm/s)
   // ============================================
-  if(strcmp(varName, "maxSpeed")     == 0) {
+  if(isMatch(varName, "maxSpeed")) {
     
     if(value >= 1.0 && value <= 200.0) {
       maxSpeed   = value;
       isNewSpeed = true;
-      Serial.print(F("maxSpeed : "));
+      Serial.print(F("maxSpeed:"));
       Serial.println(value);
     }
     else Serial.println(F("Unexpected value"));
@@ -257,12 +321,12 @@ void changeVarValue(char* cmd_Buff) {
   // ============================================
   // Acceleration Distance (mm)
   // ============================================
-  if(strcmp(varName, "accelDist")    == 0) {
+  if(isMatch(varName, "accelDist")) {
     
     if(value >= 5.0 && value <= 100.0) {
       accelDist  = value;
       isNewSpeed = true;
-      Serial.print(F("accelDist : "));
+      Serial.print(F("accelDist:"));
       Serial.println(value);
     }
     else Serial.println(F("Unexpected value"));
@@ -272,12 +336,12 @@ void changeVarValue(char* cmd_Buff) {
   // ============================================
   // Deceleration Distance (mm)
   // ============================================
-  if(strcmp(varName, "decelDist")    == 0) {
+  if(isMatch(varName, "decelDist")) {
     
     if(value >= 5.0 && value <= 100.0) {
       decelDist  = value;
       isNewSpeed = true;
-      Serial.print(F("decelDist : "));
+      Serial.print(F("decelDist:"));
       Serial.println(value);
     }
     else Serial.println(F("Unexpected value"));
@@ -287,31 +351,31 @@ void changeVarValue(char* cmd_Buff) {
   // ============================================
   // OffsetPos coords (mm)
   // ============================================
-  if(strcmp(varName, "offsetX")    == 0) {
+  if(isMatch(varName, "offsetX")) {
     
     if(!isnan(value)) {
       offsetPos.x = value;
-      Serial.print(F("offsetX : "));
+      Serial.print(F("offsetX:"));
       Serial.println(value);
     }
     else Serial.println(F("Unexpected value"));
   }
 
-  if(strcmp(varName, "offsetY")    == 0) {
+  if(isMatch(varName, "offsetY")) {
     
     if(!isnan(value)) {
       offsetPos.y = value;
-      Serial.print(F("offsetY : "));
+      Serial.print(F("offsetY:"));
       Serial.println(value);
     }
     else Serial.println(F("Unexpected value"));
   }
 
-  if(strcmp(varName, "offsetZ")    == 0) {
+  if(isMatch(varName, "offsetZ")) {
     
     if(!isnan(value)) {
       offsetPos.z = value;
-      Serial.print(F("offsetZ : "));
+      Serial.print(F("offsetZ:"));
       Serial.println(value);
     }
     else Serial.println(F("Unexpected value"));
@@ -321,7 +385,7 @@ void changeVarValue(char* cmd_Buff) {
   // ============================================
   // Angle Speed (deg /s)
   // ============================================
-  // if(strcmp(varName, "angleSpeed")   == 0) {
+  // if(isMatch(varName, "angleSpeed")) {
     
   //   if(value >= 1.0 && value <= 50.0) {
   //     angleSpeed = value;
@@ -355,7 +419,7 @@ void manuAngleMove(char* cmd_Buff) {
   // =======================================================
   // Base
   // =======================================================
-  if(strcmp(axisName, "base") == 0) {
+  if(isMatch(axisName, "base")) {
     int safe_base = limitRange(angle +rig.ofst_base, pot_Base);
 
     servo_base.write(safe_base);
@@ -371,7 +435,7 @@ void manuAngleMove(char* cmd_Buff) {
   // =======================================================
   // Shoulder
   // =======================================================
-  else if(strcmp(axisName, "shoulder") == 0) {
+  else if(isMatch(axisName, "shoulder")) {
     int safe_shoulder = limitRange(angle, pot_Shoulder) +rig.ofst_sho;
 
     servo_shoulder_L.write(     safe_shoulder                  );
@@ -388,7 +452,7 @@ void manuAngleMove(char* cmd_Buff) {
   // =======================================================
   // Elbow
   // =======================================================
-  else if(strcmp(axisName, "elbow") == 0) {
+  else if(isMatch(axisName, "elbow")) {
     int safe_elbow = limitRange(angle, pot_Elbow) +rig.ofst_elb;
 
     servo_elbow_L.write(180 -safe_elbow +rig.mir_elb_ofst);
@@ -405,7 +469,7 @@ void manuAngleMove(char* cmd_Buff) {
   // =======================================================
   // Wrist
   // =======================================================
-  else if(strcmp(axisName, "wrist") == 0) {
+  else if(isMatch(axisName, "wrist")) {
     int safe_wrist = limitRange(angle, pot_Wrist) +rig.ofst_wri;
 
     servo_wrist_L.write(     safe_wrist                  );
@@ -422,7 +486,7 @@ void manuAngleMove(char* cmd_Buff) {
   // =======================================================
   // WristRoll
   // =======================================================
-  else if(strcmp(axisName, "wristRoll") == 0) {
+  else if(isMatch(axisName, "wristRoll")) {
     
     servo_wrist_roll.write(angle);
   }
@@ -526,6 +590,8 @@ void initController() {
   );
 
   setTargetTo(homePos);
+
+  sendInitData();
   
   Serial.println(F("RES:INITILIZED"));
 
@@ -649,7 +715,10 @@ void linearInterpolation() {
   // ==============================================
   // Arrived at targetPos
   // ==============================================
-  if(totalDist_3D <= 2.0) { arrivedAtPos(); return; }
+  if(totalDist_3D <= reachRange) {
+    arrivedAtPos();
+    return;
+  }
 
 
   // ==============================================
@@ -673,7 +742,10 @@ void linearInterpolation() {
   // ==============================================
   // Step move
   // ==============================================
-  float stepSize = currentSpeed *deltaTime /totalDist_3D;
+  float tempSpeed;
+  isNavigating ? tempSpeed = currentSpeed : tempSpeed = maxSpeed;
+
+  float stepSize = tempSpeed *deltaTime /totalDist_3D;
 
   if(stepSize > 1.0) stepSize = 1.0;
 

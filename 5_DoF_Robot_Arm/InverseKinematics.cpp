@@ -22,11 +22,11 @@ JointAngles inverseKinematics(Position newPos) {
   // ===============================================
   // Safe limit
   // ===============================================
-  if(z     < 0    ) z     = 0;
-  if(pitch < -85.0) pitch = -85.0;
-  if(pitch >  85.0) pitch =  85.0;
-  if(roll  < -85.0) roll  = -85.0;
-  if(roll  >  85.0) roll  =  85.0;
+  z     <     0 ? (z     =     0, workSpace.isMin_Z     = true) : workSpace.isMin_Z     = false;
+  pitch < -85.0 ? (pitch = -85.0, workSpace.isMin_Pitch = true) : workSpace.isMin_Pitch = false;
+  pitch >  85.0 ? (pitch =  85.0, workSpace.isMax_Pitch = true) : workSpace.isMax_Pitch = false;
+  roll  < -85.0 ? (roll  = -85.0, workSpace.isMin_Roll  = true) : workSpace.isMin_Roll  = false;
+  roll  >  85.0 ? (roll  =  85.0, workSpace.isMax_Roll  = true) : workSpace.isMax_Roll  = false;
   // ===============================================
   
   // Robot dimensions in mm
@@ -75,7 +75,11 @@ JointAngles inverseKinematics(Position newPos) {
   // ===============================================
   // Safe limit
   // ===============================================
-  if(w < l *0.5 || w > l *1.95) return angles;
+  if(w < l *0.5 ) { workSpace.isMin_W = true; return angles; }
+  if(w > l *1.95) { workSpace.isMax_W = true; return angles; }
+  
+  workSpace.isMin_W = false;
+  workSpace.isMax_W = false;
   // ===============================================
 
   // Clamp ratios to avoid NAN

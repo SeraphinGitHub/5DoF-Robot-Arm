@@ -3,17 +3,17 @@ using UnityEngine.EventSystems;
 
 public class DialKnob : MonoBehaviour,
     IPointerDownHandler,
+    IPointerUpHandler,
     IDragHandler
 {
     // public 
     public  MainHandler mainHandler;
-    public  string      axisName; // Axis Cap Letter
 
     // Private 
-    private int   value         = 0;
-    private float previousAngle = 0f;
-    private float accumulDelta  = 0f;
-    private float step          = 5f; // Degrees
+    private string value         = "";
+    private float  previousAngle = 0f;
+    private float  accumulDelta  = 0f;
+    private float  fineStep      = 3f; // Degrees or mm
     
     private RectTransform knob;
 
@@ -21,47 +21,8 @@ public class DialKnob : MonoBehaviour,
         knob = GetComponent<RectTransform>();
     }
 
-    public void OnPointerDown(PointerEventData eventData) {
-        previousAngle = GetAngle(eventData);
-    }
 
-    public void OnDrag(PointerEventData eventData) {
-
-        float currentAngle = GetAngle(eventData);
-        float delta        = Mathf.DeltaAngle(previousAngle, currentAngle);
-
-        accumulDelta -= delta;
-
-        // One step every 5 degrees
-        if(accumulDelta >= step) {
-            value++;
-            accumulDelta = 0f;
-        }
-
-        if(accumulDelta <= -step) {
-            value--;
-            accumulDelta = 0f;
-        }
-
-        knob.localEulerAngles = new Vector3(0, 0, currentAngle);
-        previousAngle = currentAngle;
-        
-        SendToArduino(value);
-    }
-
-    public void SendToArduino(int value) {
-
-        // string coord = (axisName + value.ToString());
-
-        // if(axisName == "X") mainHandler.prev_X = value;
-        // if(axisName == "Y") mainHandler.prev_Y = value;
-
-        // mainHandler.serial.WriteLine(coord);
-        // mainHandler.UpdatePosText();
-        // mainHandler.ArduinoResponse(" > " +coord);
-    }
-
-
+    // Private Methods 
     private float GetAngle(PointerEventData eventData) {
         
         Vector2 knobPos = RectTransformUtility.WorldToScreenPoint(
@@ -73,9 +34,53 @@ public class DialKnob : MonoBehaviour,
 
         float angle = Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg;
 
-        angle -= 90f;
+        angle -= 180f;
 
         return angle;
+    }
+
+
+    // Public Methods
+    public void OnPointerDown(PointerEventData eventData) {
+        previousAngle = GetAngle(eventData);
+    }
+    
+    public void OnPointerUp(PointerEventData eventData) {
+        mainHandler.StopNavRoutine();
+    }
+
+    public void OnDrag(PointerEventData eventData) {
+
+        float currentAngle = GetAngle(eventData);
+        float delta        = Mathf.DeltaAngle(previousAngle, currentAngle);
+
+        accumulDelta -= delta;
+
+        // One step every 5 degrees
+        if(accumulDelta >= fineStep) {
+            value = "+";
+            accumulDelta = 0f;
+        }
+
+        if(accumulDelta <= -fineStep) {
+            value = "-";
+            accumulDelta = 0f;
+        }
+
+        knob.localEulerAngles = new Vector3(0, 0, currentAngle);
+        previousAngle = currentAngle;
+        
+        SendToArduino(value);
+        value = "";
+    }
+
+    public void SendToArduino(string value) {
+
+        if(value != "+" && value != "-") return;
+
+        string axis = mainHandler.lastAxisName;
+
+        mainHandler.NavMove($"nav>{axis}{value}:{fineStep}", axis);
     }
 
 }

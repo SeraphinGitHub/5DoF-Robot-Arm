@@ -3,17 +3,21 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
+using System;
+using System.Globalization;
 using TMPro;
 using System.IO.Ports;
 
 
 public class MainHandler : MonoBehaviour {
 
-    [HideInInspector] public SerialPort serial = new SerialPort("COM5", 115200);
+    [HideInInspector] public SerialPort serial   = new SerialPort("COM5", 115200);
+    [HideInInspector] public string lastAxisName = "Z";
     
     // Public
-    public GameObject     msg_Running;
+    public TMP_Text       msg_TargetPos;
     public TMP_Text       msg_CurPos;
+    public TMP_Text       msg_MoveSpeed;
 
     public TMP_InputField X_ValueField;
     public TMP_InputField Y_ValueField;
@@ -21,23 +25,30 @@ public class MainHandler : MonoBehaviour {
     public TMP_InputField ProgWindowField;
 
     // Private
-    private float  navInterval  = 0.1f;
-    private string curPos_str   = "";
-    private string serialBuffer = "";
+    private float  speedStep     = 5f;
+    private float  navLineStep   = 30f;
+    private float  navAngleStep  = 15f;
+    private float  navInterval   = 0.1f;
 
+    private string livePos_str   = "";
+    private string moveSpeed_str = "";
+    private string serialBuffer  = "";
+
+    private List <string> ProgList       = new List <string>();
     private Queue<string> serialMessages = new Queue<string>();
+
+    private Coroutine     progCoroutine;
     private Coroutine     navCoroutine;
 
 
     void Start() {
 
         OpenSerial();
-        msg_Running.SetActive(true );
     }
 
     void Update() {
 
-        updateCurPosDisplay();
+        updateDataDisplay();
     }
     
 
@@ -70,6 +81,8 @@ public class MainHandler : MonoBehaviour {
             string curLine = ProgList[0];
             serialMessages.Clear();
             serial.WriteLine("coord>" +curLine);
+
+            msg_TargetPos.text = curLine;
 
             bool arrived = false;
 
@@ -130,7 +143,7 @@ public class MainHandler : MonoBehaviour {
         }
     }
 
-    private void updateCurPosDisplay() {
+    private void updateDataDisplay() {
 
         if(!isSerial()) return;
 
@@ -146,14 +159,24 @@ public class MainHandler : MonoBehaviour {
 
             // Debug.Log("SERIAL RECEIVED: [" + response + "]");
 
+            updateDisplay_MoveSpeed(response);
+
             if(response.StartsWith("POS:")) {
-                msg_CurPos.text = curPos_str = response.Substring(4);
+                msg_CurPos.text = livePos_str = response.Substring(4);
             }
 
             else {
                 serialMessages.Enqueue(response);
                 // Debug.Log("QUEUE SIZE: " + serialMessages.Count);
             }
+        }
+    }
+
+    private void updateDisplay_MoveSpeed(string response) {
+
+        if(response.StartsWith("maxSpeed:")) {
+            moveSpeed_str      = response.Substring(9);
+            msg_MoveSpeed.text = moveSpeed_str + " mm/s";
         }
     }
 
@@ -186,7 +209,10 @@ public class MainHandler : MonoBehaviour {
 
             try {
                 string response = serial.ReadLine().Trim();
-                Debug.Log(response);
+                // Debug.Log(response);
+                
+                // Update display data after Init
+                updateDisplay_MoveSpeed(response);
             }
 
             catch(System.TimeoutException) {
@@ -215,19 +241,27 @@ public class MainHandler : MonoBehaviour {
 
     public void Home() {
         
-        if(isSerial()) {
-            serial.WriteLine("home");
-        }
+        if(isSerial()) serial.WriteLine("home");
     }
 
     public void SendProg() {
 
         string programText    = ProgWindowField.text;
-        List<string> ProgList = new List<string>( programText.Replace("\r", "").Split('\n') );
+        ProgList = new List<string>( programText.Replace("\r", "").Split('\n') );
         
         ProgList.RemoveAll(codeLine => string.IsNullOrWhiteSpace(codeLine));
         
-        StartCoroutine( RunProgram(ProgList) );
+        if(progCoroutine != null) return;
+        
+        progCoroutine = StartCoroutine( RunProgram(ProgList) );
+    }
+
+    public void StopProgRoutine() {
+
+        if(progCoroutine != null) {
+            StopCoroutine(progCoroutine);
+            progCoroutine = null;
+        }
     }
 
 
@@ -240,70 +274,92 @@ public class MainHandler : MonoBehaviour {
         }
     }
 
-    public void X_Plus() {
+    public void NavMove(string paramCMD, string lastAxis) {
 
         if(navCoroutine != null) StopCoroutine(navCoroutine);
-        navCoroutine = StartCoroutine(NavRoutine("nav>X+"));
+        navCoroutine = StartCoroutine( NavRoutine(paramCMD) );
+        lastAxisName = lastAxis;
+    }
+    
+    public void X_Plus() {
+
+        NavMove("nav>X+:" +navLineStep, "X");
     }
 
     public void X_Minus() {
 
-        if(navCoroutine != null) StopCoroutine(navCoroutine);
-        navCoroutine = StartCoroutine(NavRoutine("nav>X-"));
+        NavMove("nav>X-:" +navLineStep, "X");
     }
 
     public void Y_Plus() {
         
-        if(navCoroutine != null) StopCoroutine(navCoroutine);
-        navCoroutine = StartCoroutine(NavRoutine("nav>Y+"));
+        NavMove("nav>Y+:" +navLineStep, "Y");
     }
 
     public void Y_Minus() {
         
-        if(navCoroutine != null) StopCoroutine(navCoroutine);
-        navCoroutine = StartCoroutine(NavRoutine("nav>Y-"));
+        NavMove("nav>Y-:" +navLineStep, "Y");
     }
 
     public void Z_Plus() {
 
-        if(navCoroutine != null) StopCoroutine(navCoroutine);
-        navCoroutine = StartCoroutine(NavRoutine("nav>Z+"));
+        NavMove("nav>Z+:" +navLineStep, "Z");
     }
 
     public void Z_Minus() {
 
-        if(navCoroutine != null) StopCoroutine(navCoroutine);
-        navCoroutine = StartCoroutine(NavRoutine("nav>Z-"));
+        NavMove("nav>Z-:" +navLineStep, "Z");
     }
 
     public void P_Plus() {
         
-        if(navCoroutine != null) StopCoroutine(navCoroutine);
-        navCoroutine = StartCoroutine(NavRoutine("nav>P+"));
+        NavMove("nav>P+:" +navAngleStep, "P");
     }
 
     public void P_Minus() {
         
-        if(navCoroutine != null) StopCoroutine(navCoroutine);
-        navCoroutine = StartCoroutine(NavRoutine("nav>P-"));
+        NavMove("nav>P-:" +navAngleStep, "P");
     }
 
     public void R_Plus() {
 
-        if(navCoroutine != null) StopCoroutine(navCoroutine);
-        navCoroutine = StartCoroutine(NavRoutine("nav>R+"));
+        NavMove("nav>R+:" +navAngleStep, "R");
     }
 
     public void R_Minus() {
 
-        if(navCoroutine != null) StopCoroutine(navCoroutine);
-        navCoroutine = StartCoroutine(NavRoutine("nav>R-"));
+        NavMove("nav>R-:" +navAngleStep, "R");
     }
     
 
     // Record position
     public void RecordPos() {
-        ProgWindowField.text += curPos_str + "\n";
+        ProgWindowField.text += livePos_str + "\n";
+    }
+
+    
+    // Change move speed
+    public void ChangeSpeed(int value) {
+
+        float moveSpeed = float.Parse(
+            moveSpeed_str.Trim(),
+            System.Globalization.CultureInfo.InvariantCulture
+        );
+
+        if(value > 0) moveSpeed += speedStep;
+        else          moveSpeed -= speedStep;
+
+        if(moveSpeed < 1f || moveSpeed > 200f) return;
+
+        if(isSerial()) serial.WriteLine("set>maxSpeed:" +moveSpeed);
+    }
+
+    public void StopProg() {
+
+        ProgList.Clear();
+        StopProgRoutine();
+
+        if(isSerial()) serial.WriteLine("coord>" + livePos_str);
     }
 
 }

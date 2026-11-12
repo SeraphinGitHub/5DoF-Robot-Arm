@@ -7,7 +7,7 @@ public class DialKnob : MonoBehaviour,
     IDragHandler
 {
     // public 
-    public  MainHandler mainHandler;
+    public  MainPage mainHandler;
 
     // Private 
     private string value         = "";
